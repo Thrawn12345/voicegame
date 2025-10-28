@@ -1,0 +1,3 @@
+- [x] Project scaffolded
+- [x] README created
+- [x] Modern C# features demonstrated in Program.cs

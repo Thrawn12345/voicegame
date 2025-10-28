@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "p0kM95hMnec=",
+  "success": true,
+  "projectFilePath": "D:\\Desktop\\ModernCSharp\\ModernCSharp.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Felhasznalo\\.nuget\\packages\\system.speech\\9.0.10\\system.speech.9.0.10.nupkg.sha512"
+  ],
+  "logs": []
+}
