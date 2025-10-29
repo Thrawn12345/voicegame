@@ -16,3 +16,4 @@ D:\Desktop\ModernCSharp\obj\Debug\net8.0-windows\refint\ModernCSharp.dll
 D:\Desktop\ModernCSharp\obj\Debug\net8.0-windows\ModernCSharp.pdb
 D:\Desktop\ModernCSharp\obj\Debug\net8.0-windows\ModernCSharp.genruntimeconfig.cache
 D:\Desktop\ModernCSharp\obj\Debug\net8.0-windows\ref\ModernCSharp.dll
+D:\Desktop\ModernCSharp\obj\Debug\net8.0-windows\ModernCSharp.sourcelink.json
