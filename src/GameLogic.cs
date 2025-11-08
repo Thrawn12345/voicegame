@@ -127,7 +127,7 @@ namespace VoiceGame
             return null;
         }
 
-        public Enemy? SpawnEnemy(Player player, Size screenSize)
+        public Enemy? SpawnEnemy(Player player, Size screenSize, EnemyLearningAgent? learningAgent = null)
         {
             var position = CollisionDetector.FindValidEnemyPosition(
                 player.Position,
@@ -142,15 +142,18 @@ namespace VoiceGame
                 var behaviors = Enum.GetValues<EnemyBehavior>();
                 var randomBehavior = behaviors[random.Next(behaviors.Length)];
 
+                // Register enemy with learning agent
+                int learningId = learningAgent?.RegisterEnemy() ?? -1;
+
                 return new Enemy(
                     position.Value,
                     GameConstants.EnemySpeed,
                     DateTime.MinValue,
                     randomBehavior,
-                    DateTime.Now
+                    DateTime.Now,
+                    learningId
                 );
             }
-
             return null;
         }
 

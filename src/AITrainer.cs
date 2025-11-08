@@ -48,7 +48,7 @@ namespace VoiceGame
         }
 
         private ModelConfig config;
-        private List<float[]> qValues;  // Q-value matrix for each state
+        private float[][] qValues = Array.Empty<float[]>();
         private Random random;
         private TrainingMetrics metrics;
 
@@ -63,10 +63,10 @@ namespace VoiceGame
         private void InitializeNetwork()
         {
             // Initialize Q-value table/network
-            qValues = new List<float[]>();
+            qValues = new float[config.ActionSpaceSize][];
             for (int i = 0; i < config.ActionSpaceSize; i++)
             {
-                qValues.Add(new float[config.StateSpaceSize]);
+                qValues[i] = new float[config.StateSpaceSize];
             }
             Console.WriteLine($"✅ Initialized AI model: {config.StateSpaceSize} states × {config.ActionSpaceSize} actions");
         }
@@ -86,13 +86,13 @@ namespace VoiceGame
                 // Q-Learning update: Q(s,a) = Q(s,a) + α[r + γ*max(Q(s',a)) - Q(s,a)]
                 float currentQ = EstimateValue(experience.State, experience.Action);
                 float maxNextQ = FindMaxQValue(experience.NextState);
-                
+
                 float targetQ = experience.Reward + (experience.IsDone ? 0 : config.DiscountFactor * maxNextQ);
                 float loss = (targetQ - currentQ) * (targetQ - currentQ);  // MSE loss
-                
+
                 // Update Q-value
                 UpdateQValue(experience.State, experience.Action, targetQ);
-                
+
                 totalLoss += loss;
                 updates++;
             }
@@ -229,7 +229,7 @@ namespace VoiceGame
         /// <summary>
         /// Exports trained model parameters for persistence.
         /// </summary>
-        public string ExportModel(string modelName = "trained_model")
+        public string ExportModel(string modelPath = "trained_model.json")
         {
             var modelData = new
             {
@@ -245,8 +245,106 @@ namespace VoiceGame
                 }
             };
 
-            Console.WriteLine($"✅ Model exported: {modelName}");
-            return modelName;
+            try
+            {
+                // Ensure directory exists
+                string? directory = System.IO.Path.GetDirectoryName(modelPath);
+                if (!string.IsNullOrEmpty(directory) && !System.IO.Directory.Exists(directory))
+                {
+                    System.IO.Directory.CreateDirectory(directory);
+                }
+
+                // Save to JSON file
+                var json = System.Text.Json.JsonSerializer.Serialize(modelData, new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+                System.IO.File.WriteAllText(modelPath, json);
+
+                Console.WriteLine($"✅ Model exported: {modelPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Failed to export model: {ex.Message}");
+            }
+
+            return modelPath;
+        }
+
+        /// <summary>
+        /// Load a trained model from file.
+        /// </summary>
+        public static AITrainer LoadModel(string modelPath)
+        {
+            // For now, return a new trainer with default config
+            // In production, you would deserialize the saved model
+            Console.WriteLine($"📂 Loading model from {modelPath}");
+            return new AITrainer();
+        }
+
+        /// <summary>
+        /// Predict best action for given state.
+        /// </summary>
+        public int PredictAction(float[] state)
+        {
+            if (state.Length != config.StateSpaceSize)
+            {
+                throw new ArgumentException($"State size mismatch. Expected {config.StateSpaceSize}, got {state.Length}");
+            }
+
+            float[] actionValues = new float[config.ActionSpaceSize];
+
+            // Calculate Q-values for each action
+            for (int action = 0; action < config.ActionSpaceSize; action++)
+            {
+                actionValues[action] = CalculateQValue(state, action);
+            }
+
+            // Return action with highest Q-value
+            int bestAction = 0;
+            float bestValue = actionValues[0];
+            for (int i = 1; i < actionValues.Length; i++)
+            {
+                if (actionValues[i] > bestValue)
+                {
+                    bestValue = actionValues[i];
+                    bestAction = i;
+                }
+            }
+
+            return bestAction;
+        }
+
+        /// <summary>
+        /// Get Q-values for all actions given a state.
+        /// </summary>
+        public float[] GetQValues(float[] state)
+        {
+            float[] actionValues = new float[config.ActionSpaceSize];
+
+            for (int action = 0; action < config.ActionSpaceSize; action++)
+            {
+                actionValues[action] = CalculateQValue(state, action);
+            }
+
+            return actionValues;
+        }
+
+        /// <summary>
+        /// Calculate Q-value for a specific state-action pair.
+        /// </summary>
+        private float CalculateQValue(float[] state, int action)
+        {
+            if (action >= qValues.Length)
+                return 0f;
+
+            float qValue = 0f;
+            for (int i = 0; i < Math.Min(state.Length, qValues[action].Length); i++)
+            {
+                qValue += state[i] * qValues[action][i];
+            }
+
+            return qValue;
         }
     }
 }

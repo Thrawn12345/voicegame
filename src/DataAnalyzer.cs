@@ -36,10 +36,10 @@ namespace VoiceGame
             public float RewardStdDev { get; set; }
 
             [JsonPropertyName("action_distribution")]
-            public Dictionary<string, int> ActionDistribution { get; set; }
+            public Dictionary<string, int> ActionDistribution { get; set; } = new();
 
             [JsonPropertyName("confidence_stats")]
-            public ConfidenceStats ConfidenceStats { get; set; }
+            public ConfidenceStats ConfidenceStats { get; set; } = new();
         }
 
         public class ConfidenceStats
@@ -63,7 +63,7 @@ namespace VoiceGame
         public DataStats AnalyzeData(TrainingDataManager manager)
         {
             var episodes = manager.LoadAllEpisodes();
-            
+
             if (episodes.Count == 0)
             {
                 Console.WriteLine("⚠️  No training data found!");
@@ -181,13 +181,20 @@ namespace VoiceGame
         /// <summary>
         /// Exports analysis report to JSON file.
         /// </summary>
-        public string ExportReport(DataStats stats, string outputPath = "data_analysis_report.json")
+        public string ExportReport(DataStats stats, string outputPath = "training_data/data_analysis_report.json")
         {
             var options = new JsonSerializerOptions
             {
                 WriteIndented = true,
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
+
+            // Ensure directory exists
+            var directory = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
 
             string json = JsonSerializer.Serialize(new { analysis_date = DateTime.UtcNow, stats }, options);
             File.WriteAllText(outputPath, json);
@@ -213,6 +220,13 @@ namespace VoiceGame
                 foreach (var exp in episode.Experiences)
                 {
                     string actionName = DataCollector.ActionToString(exp.Action);
+
+                    // Handle unknown actions gracefully
+                    if (!actionRewards.ContainsKey(actionName))
+                    {
+                        actionRewards[actionName] = new List<float>();
+                    }
+
                     actionRewards[actionName].Add(exp.Reward);
                 }
             }

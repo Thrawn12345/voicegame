@@ -253,7 +253,11 @@ namespace VoiceGame
                 };
 
                 var json = System.Text.Json.JsonSerializer.Serialize(data, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-                var filename = $"training_data_ep{episodeCount}_{DateTime.Now:HHmmss}.json";
+
+                // Ensure training_data directory exists
+                Directory.CreateDirectory("training_data");
+
+                var filename = $"training_data/training_data_ep{episodeCount}_{DateTime.Now:HHmmss}.json";
                 File.WriteAllText(filename, json);
                 Console.WriteLine($"💾 Saved {experiences.Count} training examples to {filename}");
             }

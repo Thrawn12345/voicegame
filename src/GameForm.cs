@@ -22,6 +22,9 @@ namespace VoiceGame
         private VoiceController voiceController = null!;
         private readonly AIShootingAgent aiAgent = new();
         private readonly TrainingDataCollector trainingCollector = new();
+        private readonly EnemyLearningAgent enemyLearning = new();
+        private AIPlayer? aiPlayer = null;
+        private bool aiMode = false;
 
         // Counters for AI training
         private int enemiesDestroyed = 0;
@@ -109,6 +112,11 @@ namespace VoiceGame
             {
                 RestartGame();
             }
+            else if (e.KeyCode == Keys.A && !gameOver)
+            {
+                // Toggle AI mode with 'A' key
+                ToggleAIMode();
+            }
         }
 
         private void RestartGame()
@@ -137,9 +145,56 @@ namespace VoiceGame
             voiceController.Speak("New game started!");
         }
 
+        private void ToggleAIMode()
+        {
+            // Initialize AI player on first use
+            if (aiPlayer == null)
+            {
+                // Try to load the most recent trained model from training_data folder
+                string trainingDir = "training_data";
+                if (System.IO.Directory.Exists(trainingDir))
+                {
+                    string[] modelFiles = System.IO.Directory.GetFiles(trainingDir, "ai_model_*.json");
+                    string? latestModel = modelFiles.Length > 0 ? modelFiles.OrderByDescending(f => f).FirstOrDefault() : null;
+
+                    aiPlayer = new AIPlayer(latestModel ?? string.Empty, explorationRate: 0.1f);
+                }
+                else
+                {
+                    aiPlayer = new AIPlayer(string.Empty, explorationRate: 0.1f);
+                }
+            }
+            aiMode = !aiMode;
+
+            if (aiMode)
+            {
+                // Disable voice control when AI takes over
+                Text = "Voice Game - AI MODE (Press 'A' to disable)";
+            }
+            else
+            {
+                // Re-enable voice control
+                Text = "Voice Controlled Game with AI Shooting";
+            }
+
+            Console.WriteLine(aiMode ? "🤖 AI Mode ENABLED" : "🎤 Voice Control ENABLED");
+        }
+
         private void GameTimer_Tick(object? sender, EventArgs e)
         {
             if (gameOver) return;
+
+            // AI Mode: Let AI control player movement
+            if (aiMode && aiPlayer != null)
+            {
+                var aiVelocity = aiPlayer.GetRecommendedVelocity(
+                    player.Position, player.Velocity,
+                    enemies, lasers,
+                    lives, gameOver,
+                    ClientSize.Width, ClientSize.Height
+                );
+                player = player with { Velocity = aiVelocity };
+            }
 
             // Update game objects using GameLogic
             player = gameLogic.UpdatePlayerPosition(player, ClientSize);
@@ -152,23 +207,110 @@ namespace VoiceGame
             enemyBullets.Clear();
             enemyBullets.AddRange(updatedBullets);
 
-            var updatedEnemies = gameLogic.UpdateEnemies(enemies, player, ClientSize);
-            enemies.Clear();
-            enemies.AddRange(updatedEnemies);
+            // Update enemies with learning-based movement
+            var updatedEnemies = new List<Enemy>();
+            foreach (var enemy in enemies)
+            {
+                if (enemy.LearningId >= 0)
+                {
+                    // Use learned movement
+                    var learnedVelocity = enemyLearning.GetMovementDecision(
+                        enemy.LearningId,
+                        enemy.Position,
+                        player.Position,
+                        player.Velocity,
+                        lasers,
+                        enemies,
+                        ClientSize.Width,
+                        ClientSize.Height
+                    );
 
-            // Handle enemy shooting
+                    var movedEnemy = enemy with
+                    {
+                        Position = new PointF(
+                            enemy.Position.X + learnedVelocity.X,
+                            enemy.Position.Y + learnedVelocity.Y
+                        )
+                    };
+                    updatedEnemies.Add(movedEnemy);
+                }
+                else
+                {
+                    // Fallback to original behavior
+                    updatedEnemies.Add(enemy);
+                }
+            }
+
+            // Apply collision detection and bounds
+            var finalEnemies = gameLogic.UpdateEnemies(updatedEnemies, player, ClientSize);
+            enemies.Clear();
+            enemies.AddRange(finalEnemies);
+
+            // Handle enemy shooting with learning
             for (int i = 0; i < enemies.Count; i++)
             {
-                var bullet = gameLogic.CreateEnemyBullet(enemies[i], player);
-                if (bullet != null)
+                var enemy = enemies[i];
+
+                if (enemy.LearningId >= 0)
                 {
-                    enemyBullets.Add(bullet);
-                    enemies[i] = enemies[i] with { LastShotTime = DateTime.Now };
+                    // Use learned shooting
+                    bool shouldShoot = enemyLearning.ShouldShoot(
+                        enemy.LearningId,
+                        enemy.Position,
+                        player.Position,
+                        player.Velocity,
+                        lasers,
+                        enemies,
+                        ClientSize.Width,
+                        ClientSize.Height,
+                        out PointF shootDirection
+                    );
+
+                    if (shouldShoot && (DateTime.Now - enemy.LastShotTime).TotalMilliseconds > GameConstants.EnemyShootCooldownMs)
+                    {
+                        var bulletVelocity = new PointF(
+                            shootDirection.X * GameConstants.EnemyBulletSpeed,
+                            shootDirection.Y * GameConstants.EnemyBulletSpeed
+                        );
+                        enemyBullets.Add(new EnemyBullet(enemy.Position, bulletVelocity));
+                        enemies[i] = enemy with { LastShotTime = DateTime.Now };
+
+                        // Small reward for shooting
+                        enemyLearning.RecordReward(enemy.LearningId, 1f);
+                    }
+                }
+                else
+                {
+                    // Original shooting logic
+                    var bullet = gameLogic.CreateEnemyBullet(enemy, player);
+                    if (bullet != null)
+                    {
+                        enemyBullets.Add(bullet);
+                        enemies[i] = enemy with { LastShotTime = DateTime.Now };
+                    }
                 }
             }
 
             // Process collisions
             var laserEnemyResult = gameLogic.ProcessLaserEnemyCollisions(lasers, enemies, enemiesDestroyed);
+
+            // Track destroyed enemies for learning
+            var destroyedCount = laserEnemyResult.enemiesDestroyed - enemiesDestroyed;
+            if (destroyedCount > 0)
+            {
+                // Find which enemies were destroyed and penalize them
+                foreach (var enemy in enemies)
+                {
+                    if (!laserEnemyResult.enemies.Any(e => e.LearningId == enemy.LearningId))
+                    {
+                        if (enemy.LearningId >= 0)
+                        {
+                            enemyLearning.EnemyDestroyed(enemy.LearningId);
+                        }
+                    }
+                }
+            }
+
             lasers.Clear();
             lasers.AddRange(laserEnemyResult.lasers);
             enemies.Clear();
@@ -214,6 +356,16 @@ namespace VoiceGame
                     lives--;
                     enemyBullets.RemoveAt(i);
 
+                    // Reward nearby enemies for successful hit
+                    foreach (var enemy in enemies)
+                    {
+                        float distance = CollisionDetector.Distance(enemy.Position, player.Position);
+                        if (distance < 200f && enemy.LearningId >= 0)
+                        {
+                            enemyLearning.EnemyHitPlayer(enemy.LearningId);
+                        }
+                    }
+
                     if (lives <= 0)
                     {
                         EndGame();
@@ -229,6 +381,10 @@ namespace VoiceGame
 
             var finalSnapshot = new GameStateSnapshot(lives, enemiesDestroyed, bulletsDestroyed, DateTime.Now);
             trainingCollector.EndEpisode(finalSnapshot);
+
+            // Save enemy learning models
+            enemyLearning.SaveModels();
+            Console.WriteLine("🧠 Enemy learning data saved");
         }
 
         private void AIShootingTimer_Tick(object? sender, EventArgs e)
@@ -255,7 +411,7 @@ namespace VoiceGame
         {
             if (gameOver) return;
 
-            var newEnemy = gameLogic.SpawnEnemy(player, ClientSize);
+            var newEnemy = gameLogic.SpawnEnemy(player, ClientSize, enemyLearning);
             if (newEnemy != null)
             {
                 enemies.Add(newEnemy);

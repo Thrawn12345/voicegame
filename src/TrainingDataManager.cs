@@ -17,7 +17,7 @@ namespace VoiceGame
         public class SerializableExperience
         {
             [JsonPropertyName("state")]
-            public float[] State { get; set; }
+            public float[] State { get; set; } = Array.Empty<float>();
 
             [JsonPropertyName("action")]
             public int Action { get; set; }
@@ -26,7 +26,7 @@ namespace VoiceGame
             public float Reward { get; set; }
 
             [JsonPropertyName("next_state")]
-            public float[] NextState { get; set; }
+            public float[] NextState { get; set; } = Array.Empty<float>();
 
             [JsonPropertyName("is_done")]
             public bool IsDone { get; set; }
@@ -44,7 +44,7 @@ namespace VoiceGame
             public int Episode { get; set; }
 
             [JsonPropertyName("session_id")]
-            public string SessionId { get; set; }
+            public string SessionId { get; set; } = string.Empty;
 
             [JsonPropertyName("experiences_count")]
             public int ExperiencesCount { get; set; }
@@ -56,7 +56,7 @@ namespace VoiceGame
             public long Timestamp { get; set; }
 
             [JsonPropertyName("experiences")]
-            public List<SerializableExperience> Experiences { get; set; }
+            public List<SerializableExperience> Experiences { get; set; } = new();
         }
 
         public TrainingDataManager(string dataDir = "training_data")
@@ -132,7 +132,7 @@ namespace VoiceGame
             };
 
             string json = File.ReadAllText(filepath);
-            return JsonSerializer.Deserialize<TrainingEpisode>(json, options);
+            return JsonSerializer.Deserialize<TrainingEpisode>(json, options) ?? new TrainingEpisode();
         }
 
         /// <summary>

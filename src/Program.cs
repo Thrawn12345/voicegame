@@ -1,16 +1,32 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace VoiceGame
 {
     public static class Program
     {
+        // Import Windows API functions for console attachment
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool AllocConsole();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool AttachConsole(int dwProcessId);
+
+        private const int ATTACH_PARENT_PROCESS = -1;
+
         [STAThread]
         public static void Main(string[] args)
         {
             // Handle command-line arguments for automated collection
             if (args.Length > 0)
             {
+                // Attach to parent console or allocate new one for console output
+                if (!AttachConsole(ATTACH_PARENT_PROCESS))
+                {
+                    AllocConsole();
+                }
+
                 string command = args[0].ToLower();
 
                 switch (command)
@@ -49,6 +65,12 @@ namespace VoiceGame
                         interactiveTrainer.Run(new[] { "interactive" });
                         return;
 
+                    case "auto":
+                    case "autotrain":
+                        // Run infinite AI vs AI training loop
+                        RunAutoTrainer();
+                        return;
+
                     case "help":
                         PrintCommandHelp();
                         return;
@@ -60,6 +82,28 @@ namespace VoiceGame
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new GameForm());
+        }
+
+        private static void RunAutoTrainer()
+        {
+            var autoTrainer = new AutoTrainer();
+            var cts = new System.Threading.CancellationTokenSource();
+
+            // Handle Ctrl+C gracefully
+            Console.CancelKeyPress += (sender, e) =>
+            {
+                e.Cancel = true;
+                cts.Cancel();
+            };
+
+            try
+            {
+                autoTrainer.RunInfiniteTraining(cts.Token).Wait();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\n❌ Error during auto-training: {ex.Message}");
+            }
         }
 
         private static void PrintCommandHelp()
@@ -80,6 +124,7 @@ namespace VoiceGame
             Console.WriteLine("  dotnet run -- train         Train AI model on collected data");
             Console.WriteLine("  dotnet run -- analyze       View training data statistics");
             Console.WriteLine("  dotnet run -- export        Export data for ML frameworks");
+            Console.WriteLine("  dotnet run -- auto          Run infinite AI vs AI training");
             Console.WriteLine("  dotnet run -- interactive   Launch interactive trainer menu\n");
 
             Console.WriteLine("EXAMPLES:");
@@ -94,6 +139,9 @@ namespace VoiceGame
 
             Console.WriteLine("  # Analyze collected training data");
             Console.WriteLine("  dotnet run -- analyze\n");
+
+            Console.WriteLine("  # Run infinite AI vs AI training (Press Ctrl+C to stop)");
+            Console.WriteLine("  dotnet run -- auto\n");
         }
     }
 }

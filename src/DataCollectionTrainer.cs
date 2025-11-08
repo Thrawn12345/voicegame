@@ -109,12 +109,15 @@ namespace VoiceGame
 
         private void TrainModel()
         {
+            Console.WriteLine("DEBUG: TrainModel() method started.");
             Console.WriteLine("🤖 TRAINING AI MODEL");
             Console.WriteLine(new string('═', 45) + "\n");
 
             try
             {
+                Console.WriteLine("DEBUG: Loading episodes...");
                 var episodes = dataManager.LoadAllEpisodes();
+                Console.WriteLine($"DEBUG: Found {episodes.Count} episodes.");
 
                 if (episodes.Count == 0)
                 {
@@ -124,14 +127,18 @@ namespace VoiceGame
                 }
 
                 Console.WriteLine($"📚 Loaded {episodes.Count} episodes\n");
+                Console.WriteLine("DEBUG: Creating AITrainer instance...");
 
                 // Create trainer with default config
                 var trainer = new AITrainer();
+                Console.WriteLine("DEBUG: AITrainer instance created. Starting training...");
 
                 // Train on all episodes
                 trainer.TrainOnEpisodes(episodes);
+                Console.WriteLine("DEBUG: Training finished.");
 
                 // Show learning insights
+                Console.WriteLine("DEBUG: Analyzing action rewards...");
                 var actionRewards = analyzer.AnalyzeActionRewards(dataManager);
                 Console.WriteLine("💡 LEARNING INSIGHTS:");
                 Console.WriteLine("   Best performing actions:");
@@ -141,13 +148,17 @@ namespace VoiceGame
                 }
 
                 // Export trained model
-                trainer.ExportModel("ai_model_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
+                string modelFileName = "ai_model_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".json";
+                string modelPath = System.IO.Path.Combine("training_data", modelFileName);
+                trainer.ExportModel(modelPath);
 
                 Console.WriteLine("\n✅ Training completed!");
+                Console.WriteLine($"   Model saved to: {modelPath}");
                 Console.WriteLine("   Model ready for deployment.\n");
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"DEBUG: An exception occurred in TrainModel: {ex.ToString()}");
                 Console.WriteLine($"❌ Error during training: {ex.Message}\n");
             }
         }

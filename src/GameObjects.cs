@@ -8,7 +8,7 @@ namespace VoiceGame
 
     public record Laser(PointF Position, PointF Velocity);
 
-    public record Enemy(PointF Position, float Speed, DateTime LastShotTime, EnemyBehavior Behavior, DateTime LastBehaviorChange);
+    public record Enemy(PointF Position, float Speed, DateTime LastShotTime, EnemyBehavior Behavior, DateTime LastBehaviorChange, int LearningId);
 
     public record EnemyBullet(PointF Position, PointF Velocity);
     public record Obstacle(PointF Position, SizeF Size);
