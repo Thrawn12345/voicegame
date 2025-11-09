@@ -2,6 +2,10 @@
 bin/
 obj/
 
+# Training data (local only, not tracked in git)
+training_data/
+*.json
+
 # Visual Studio / VS Code
 .vs/
 .vscode/

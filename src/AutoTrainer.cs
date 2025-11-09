@@ -205,12 +205,24 @@ namespace VoiceGame
                         gameSize.Height
                     );
 
+                    // Calculate new position with learned velocity
+                    var newPos = new PointF(
+                        enemy.Position.X + learnedVelocity.X,
+                        enemy.Position.Y + learnedVelocity.Y
+                    );
+
+                    // Validate position with collision detection (same as player movement)
+                    var validPos = CollisionDetector.GetValidPosition(
+                        enemy.Position,
+                        newPos,
+                        GameConstants.EnemyRadius,
+                        obstacleManager.Obstacles.ToList(),
+                        gameSize
+                    );
+
                     var movedEnemy = enemy with
                     {
-                        Position = new PointF(
-                            enemy.Position.X + learnedVelocity.X,
-                            enemy.Position.Y + learnedVelocity.Y
-                        )
+                        Position = validPos
                     };
                     updatedEnemies.Add(movedEnemy);
                 }
