@@ -393,14 +393,14 @@ namespace VoiceGame
             {
                 var modelManager = new ModelManager();
 
+                // Save player AI model
+                var playerModelData = playerAI.GetModelData();
+                double playerPerformance = playerAI.GetAverageReward();
+                string playerModelPath = modelManager.SaveBestModel("player_ai", playerModelData, playerPerformance);
+                Console.WriteLine($"💾 Player AI model saved: {Path.GetFileName(playerModelPath)}");
+
                 // Save enemy models (only best ones)
                 enemyLearning.SaveModels();
-
-                // Cleanup old training data files every 50 episodes
-                if (episodeCount % 50 == 0)
-                {
-                    modelManager.CleanupTrainingData(100); // Keep 100 most recent training files
-                }
 
                 // Show model summary every 100 episodes
                 if (episodeCount % 100 == 0)
@@ -477,7 +477,7 @@ namespace VoiceGame
                 var modelManager = new ModelManager();
                 var playerModelData = shootingTrainer.GetModelData();
                 double playerPerformance = shootingTrainer.GetAverageReward();
-                
+
                 string modelPath = modelManager.SaveBestModel("player_shooting", playerModelData, playerPerformance);
                 Console.WriteLine($"  💾 Best model: {Path.GetFileName(modelPath)}");
             }
@@ -504,6 +504,7 @@ namespace VoiceGame
             Console.WriteLine($"  Episodes/Hour:          {episodesPerHour:F1}");
             Console.WriteLine($"  Next save at:           Episode {(episodeCount / saveInterval + 1) * saveInterval}");
             Console.WriteLine("═══════════════════════════════════════════════\n");
+            Console.WriteLine("🔄 Continuing training...\n");
         }
     }
 }

@@ -166,5 +166,29 @@ namespace VoiceGame
 
             return actionConfidence;
         }
+
+        /// <summary>
+        /// Export the AI model to a file.
+        /// </summary>
+        public string ExportModel(string modelPath = "player_ai_model.json")
+        {
+            return trainer.ExportModel(modelPath);
+        }
+
+        /// <summary>
+        /// Get the underlying trainer's model data.
+        /// </summary>
+        public object GetModelData()
+        {
+            return trainer.GetModelData();
+        }
+
+        /// <summary>
+        /// Get the trainer's average reward for performance tracking.
+        /// </summary>
+        public double GetAverageReward()
+        {
+            return trainer.GetAverageReward();
+        }
     }
 }

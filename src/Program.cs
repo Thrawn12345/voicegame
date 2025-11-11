@@ -100,23 +100,35 @@ namespace VoiceGame
 
         private static void RunAutoTrainer()
         {
-            var autoTrainer = new AutoTrainer();
-            var cts = new System.Threading.CancellationTokenSource();
-
-            // Handle Ctrl+C gracefully
-            Console.CancelKeyPress += (sender, e) =>
-            {
-                e.Cancel = true;
-                cts.Cancel();
-            };
-
             try
             {
+                var autoTrainer = new AutoTrainer();
+                var cts = new System.Threading.CancellationTokenSource();
+
+                // Handle Ctrl+C gracefully
+                Console.CancelKeyPress += (sender, e) =>
+                {
+                    e.Cancel = true;
+                    cts.Cancel();
+                };
+
+                Console.WriteLine("🚀 Starting auto-trainer...\n");
                 autoTrainer.RunInfiniteTraining(cts.Token).Wait();
+            }
+            catch (AggregateException aex)
+            {
+                Console.WriteLine($"\n❌ Error during auto-training:");
+                foreach (var ex in aex.InnerExceptions)
+                {
+                    Console.WriteLine($"   {ex.GetType().Name}: {ex.Message}");
+                    Console.WriteLine($"   Stack: {ex.StackTrace}");
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"\n❌ Error during auto-training: {ex.Message}");
+                Console.WriteLine($"   Type: {ex.GetType().Name}");
+                Console.WriteLine($"   Stack: {ex.StackTrace}");
             }
         }
 
@@ -140,7 +152,7 @@ namespace VoiceGame
             Console.WriteLine("  dotnet run -- export        Export data for ML frameworks");
             Console.WriteLine("  dotnet run -- auto          Run infinite AI vs AI training");
             Console.WriteLine("  dotnet run -- interactive   Launch interactive trainer menu\n");
-            
+
             Console.WriteLine("MODEL MANAGEMENT:");
             Console.WriteLine("  dotnet run -- models        Show current AI models");
             Console.WriteLine("  dotnet run -- cleanup       Clean old files & migrate models\n");

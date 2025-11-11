@@ -4,8 +4,11 @@ obj/
 
 # Training data (local only, not tracked in git)
 training_data/
-models/
-*.json
+training_data_*.json
+
+# Track models directory but ignore backups
+!models/
+models/*_backup.json
 
 # Visual Studio / VS Code
 .vs/
