@@ -71,6 +71,20 @@ namespace VoiceGame
                         RunAutoTrainer();
                         return;
 
+                    case "models":
+                        // Show current AI models
+                        var modelManager = new ModelManager();
+                        modelManager.PrintModelSummary();
+                        return;
+
+                    case "cleanup":
+                        // Clean up old training data and migrate models
+                        var cleanupManager = new ModelManager();
+                        cleanupManager.MigrateOldModels();
+                        cleanupManager.CleanupTrainingData(50);
+                        Console.WriteLine("✅ Cleanup completed!");
+                        return;
+
                     case "help":
                         PrintCommandHelp();
                         return;
@@ -126,6 +140,10 @@ namespace VoiceGame
             Console.WriteLine("  dotnet run -- export        Export data for ML frameworks");
             Console.WriteLine("  dotnet run -- auto          Run infinite AI vs AI training");
             Console.WriteLine("  dotnet run -- interactive   Launch interactive trainer menu\n");
+            
+            Console.WriteLine("MODEL MANAGEMENT:");
+            Console.WriteLine("  dotnet run -- models        Show current AI models");
+            Console.WriteLine("  dotnet run -- cleanup       Clean old files & migrate models\n");
 
             Console.WriteLine("EXAMPLES:");
             Console.WriteLine("  # Play the game normally");

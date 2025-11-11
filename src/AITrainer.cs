@@ -346,5 +346,34 @@ namespace VoiceGame
 
             return qValue;
         }
+
+        /// <summary>
+        /// Gets the average reward from training metrics.
+        /// </summary>
+        public double GetAverageReward()
+        {
+            return metrics.AverageEpisodeReward;
+        }
+
+        /// <summary>
+        /// Gets the model data for saving to ModelManager.
+        /// </summary>
+        public object GetModelData()
+        {
+            return new
+            {
+                config = config,
+                q_values = qValues,
+                export_date = DateTime.UtcNow.ToString("O"),
+                metrics = new
+                {
+                    episodes_processed = metrics.EpisodesProcessed,
+                    experiences_processed = metrics.ExperiencesProcessed,
+                    average_episode_reward = metrics.AverageEpisodeReward,
+                    average_value_loss = metrics.AverageValueLoss,
+                    performance_score = metrics.AverageEpisodeReward
+                }
+            };
+        }
     }
 }

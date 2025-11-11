@@ -147,13 +147,15 @@ namespace VoiceGame
                     Console.WriteLine($"   • {kvp.Key,-15} avg reward: {kvp.Value:F3}");
                 }
 
-                // Export trained model
-                string modelFileName = "ai_model_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".json";
-                string modelPath = System.IO.Path.Combine("training_data", modelFileName);
-                trainer.ExportModel(modelPath);
+                // Export trained model using ModelManager (only save if it's the best)
+                var modelManager = new ModelManager();
+                var modelData = trainer.GetModelData();
+                double performance = trainer.GetAverageReward();
+                
+                string modelPath = modelManager.SaveBestModel("player_ai", modelData, performance);
 
                 Console.WriteLine("\n✅ Training completed!");
-                Console.WriteLine($"   Model saved to: {modelPath}");
+                Console.WriteLine($"   Best model saved to: {Path.GetFileName(modelPath)}");
                 Console.WriteLine("   Model ready for deployment.\n");
             }
             catch (Exception ex)

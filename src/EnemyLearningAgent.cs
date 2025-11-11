@@ -348,14 +348,49 @@ namespace VoiceGame
         }
 
         /// <summary>
-        /// Save enemy learning models to training_data folder.
+        /// Save enemy learning models to models folder (only best models).
         /// </summary>
         public void SaveModels()
         {
-            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            movementTrainer.ExportModel($"training_data/enemy_movement_model_{timestamp}.json");
-            shootingTrainer.ExportModel($"training_data/enemy_shooting_model_{timestamp}.json");
-            Console.WriteLine("💾 Enemy learning models saved");
+            var modelManager = new ModelManager();
+            
+            // Calculate performance metrics from actual enemy experiences
+            double movementPerformance = CalculateMovementPerformance();
+            double shootingPerformance = CalculateShootingPerformance();
+
+            // Save only if these are the best models
+            var movementData = movementTrainer.GetModelData();
+            var shootingData = shootingTrainer.GetModelData();
+            
+            modelManager.SaveBestModel("enemy_movement", movementData, movementPerformance);
+            modelManager.SaveBestModel("enemy_shooting", shootingData, shootingPerformance);
+            
+            Console.WriteLine("💾 Enemy learning models saved (best only)");
+        }
+
+        /// <summary>
+        /// Calculate movement performance based on accumulated rewards.
+        /// </summary>
+        private double CalculateMovementPerformance()
+        {
+            if (enemyExperiences.Count == 0) return 0.0;
+            
+            var recentExperiences = enemyExperiences.Values.TakeLast(20); // Last 20 enemies
+            return recentExperiences.Any() ? recentExperiences.Average(e => e.AccumulatedReward) : 0.0;
+        }
+
+        /// <summary>
+        /// Calculate shooting performance based on successful hits vs attempts.
+        /// </summary>
+        private double CalculateShootingPerformance()
+        {
+            if (enemyExperiences.Count == 0) return 0.0;
+            
+            // Simple heuristic: positive rewards indicate successful actions
+            var recentExperiences = enemyExperiences.Values.TakeLast(20);
+            var positiveRewards = recentExperiences.Where(e => e.AccumulatedReward > 0);
+            
+            return positiveRewards.Any() ? positiveRewards.Average(e => e.AccumulatedReward) : 0.0;
         }
 
         /// <summary>
