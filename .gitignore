@@ -4,6 +4,7 @@ obj/
 
 # Training data (local only, not tracked in git)
 training_data/
+models/
 *.json
 
 # Visual Studio / VS Code

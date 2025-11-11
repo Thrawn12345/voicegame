@@ -150,19 +150,22 @@ namespace VoiceGame
             // Initialize AI player on first use
             if (aiPlayer == null)
             {
-                // Try to load the most recent trained model from training_data folder
-                string trainingDir = "training_data";
-                if (System.IO.Directory.Exists(trainingDir))
+                // Try to load the best player model from models folder
+                var modelManager = new ModelManager();
+                string bestModelPath = modelManager.GetBestModelPath("player_ai");
+                
+                if (string.IsNullOrEmpty(bestModelPath))
                 {
-                    string[] modelFiles = System.IO.Directory.GetFiles(trainingDir, "ai_model_*.json");
-                    string? latestModel = modelFiles.Length > 0 ? modelFiles.OrderByDescending(f => f).FirstOrDefault() : null;
+                    // Fallback to old location for backward compatibility
+                    string trainingDir = "training_data";
+                    if (System.IO.Directory.Exists(trainingDir))
+                    {
+                        string[] modelFiles = System.IO.Directory.GetFiles(trainingDir, "ai_model_*.json");
+                        bestModelPath = modelFiles.Length > 0 ? modelFiles.OrderByDescending(f => f).FirstOrDefault() ?? string.Empty : string.Empty;
+                    }
+                }
 
-                    aiPlayer = new AIPlayer(latestModel ?? string.Empty, explorationRate: 0.1f);
-                }
-                else
-                {
-                    aiPlayer = new AIPlayer(string.Empty, explorationRate: 0.1f);
-                }
+                aiPlayer = new AIPlayer(bestModelPath, explorationRate: 0.1f);
             }
             aiMode = !aiMode;
 

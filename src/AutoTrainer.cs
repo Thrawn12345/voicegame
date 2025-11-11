@@ -23,7 +23,7 @@ namespace VoiceGame
         private Random random;
 
         // Game state
-        private Player player;
+        private Player player = null!; // Will be initialized in InitializeEpisode
         private List<Laser> lasers = new();
         private List<Enemy> enemies = new();
         private List<EnemyBullet> enemyBullets = new();
@@ -56,6 +56,10 @@ namespace VoiceGame
             aiShootingAgent = new AIShootingAgent();
             trainingCollector = new TrainingDataCollector();
             sessionStart = DateTime.Now;
+
+            // Setup model management and migrate old models
+            var modelManager = new ModelManager();
+            modelManager.MigrateOldModels();
 
             Console.WriteLine("╔═══════════════════════════════════════════════╗");
             Console.WriteLine("║   AUTO-TRAINER: AI vs AI Training Loop       ║");
@@ -387,12 +391,24 @@ namespace VoiceGame
         {
             try
             {
-                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                var modelManager = new ModelManager();
 
-                // Save enemy models
+                // Save enemy models (only best ones)
                 enemyLearning.SaveModels();
 
-                Console.WriteLine($"\n💾 Models saved at episode {episodeCount}");
+                // Cleanup old training data files every 50 episodes
+                if (episodeCount % 50 == 0)
+                {
+                    modelManager.CleanupTrainingData(100); // Keep 100 most recent training files
+                }
+
+                // Show model summary every 100 episodes
+                if (episodeCount % 100 == 0)
+                {
+                    modelManager.PrintModelSummary();
+                }
+
+                Console.WriteLine($"\n💾 Best models saved at episode {episodeCount}");
             }
             catch (Exception ex)
             {
@@ -457,11 +473,13 @@ namespace VoiceGame
 
                 Console.WriteLine($"  ✅ Player AI checkpoint saved");
 
-                // Save model checkpoint
-                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                string modelPath = $"training_data/player_shooting_model_{timestamp}.json";
-                shootingTrainer.ExportModel(modelPath);
-                Console.WriteLine($"  💾 Model: {modelPath}");
+                // Save model checkpoint using ModelManager
+                var modelManager = new ModelManager();
+                var playerModelData = shootingTrainer.GetModelData();
+                double playerPerformance = shootingTrainer.GetAverageReward();
+                
+                string modelPath = modelManager.SaveBestModel("player_shooting", playerModelData, playerPerformance);
+                Console.WriteLine($"  💾 Best model: {Path.GetFileName(modelPath)}");
             }
             catch (Exception ex)
             {
