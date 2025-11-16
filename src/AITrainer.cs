@@ -14,25 +14,25 @@ namespace VoiceGame
         public class ModelConfig
         {
             [JsonPropertyName("learning_rate")]
-            public float LearningRate { get; set; } = 0.001f;
+            public float LearningRate { get; set; } = 0.0003f;  // Further reduced for companion system stability
 
             [JsonPropertyName("discount_factor")]
-            public float DiscountFactor { get; set; } = 0.99f;
+            public float DiscountFactor { get; set; } = 0.98f;  // Increased to value long-term companion coordination
 
             [JsonPropertyName("exploration_rate")]
-            public float ExplorationRate { get; set; } = 0.1f;
+            public float ExplorationRate { get; set; } = 0.12f;  // Balanced exploration for companion coordination
 
             [JsonPropertyName("batch_size")]
-            public int BatchSize { get; set; } = 32;
+            public int BatchSize { get; set; } = 128;  // Larger batches for companion feature learning
 
             [JsonPropertyName("hidden_layer_size")]
-            public int HiddenLayerSize { get; set; } = 128;
+            public int HiddenLayerSize { get; set; } = 384;  // Enhanced capacity for companion coordination
 
             [JsonPropertyName("action_space_size")]
-            public int ActionSpaceSize { get; set; } = 9;  // 9 possible actions
+            public int ActionSpaceSize { get; set; } = 12;  // 12 possible actions (9 basic + 3 target-based)
 
             [JsonPropertyName("state_space_size")]
-            public int StateSpaceSize { get; set; } = 30;  // 30 state features
+            public int StateSpaceSize { get; set; } = 42;  // 42 state features (34 + 8 enhanced companion features)
         }
 
         public class TrainingMetrics
@@ -51,6 +51,12 @@ namespace VoiceGame
         private float[][] qValues = Array.Empty<float[]>();
         private Random random;
         private TrainingMetrics metrics;
+        
+        // Adaptive training parameters for companion coordination
+        private float companionPerformanceWeight = 1.2f;  // Bonus for good companion coordination
+        private int adaptiveTrainingWindow = 100;  // Episodes to evaluate performance
+        private float performanceThreshold = 0.7f;  // Threshold for increasing learning rate
+        private Queue<float> recentPerformanceScores = new();
 
         public AITrainer(ModelConfig? config = null)
         {
@@ -374,6 +380,95 @@ namespace VoiceGame
                     performance_score = metrics.AverageEpisodeReward
                 }
             };
+        }
+
+        /// <summary>
+        /// Calculate enhanced reward that considers companion coordination.
+        /// </summary>
+        public float CalculateCompanionAwareReward(
+            int enemiesDestroyed,
+            int bulletsDestroyed, 
+            int lives,
+            bool gameOver,
+            int companionsAlive,
+            FormationType formationType,
+            float formationEfficiency,
+            bool companionFireSupport)
+        {
+            float baseReward = 0f;
+            
+            // Base rewards
+            baseReward += enemiesDestroyed * 10f;    // Enemy kills
+            baseReward += bulletsDestroyed * 2f;     // Bullet dodging
+            baseReward += lives * 5f;                // Staying alive
+            
+            // Penalty for game over
+            if (gameOver)
+            {
+                baseReward -= 50f;
+            }
+            
+            // Companion coordination bonuses
+            float companionBonus = 0f;
+            companionBonus += companionsAlive * 3f;           // Keep companions alive
+            companionBonus += formationEfficiency * 8f;       // Formation effectiveness
+            companionBonus += companionFireSupport ? 5f : 0f; // Coordinated fire support
+            
+            // Formation type bonuses (situational effectiveness)
+            float formationBonus = formationType switch
+            {
+                FormationType.Adaptive => 4f,  // Best formation
+                FormationType.Wedge => 3f,     // Good for offense
+                FormationType.Diamond => 2f,   // Good for defense
+                FormationType.Line => 1f,      // Basic formation
+                FormationType.Circle => 1.5f,  // Good for surrounded situations
+                _ => 0f
+            };
+            
+            // Apply companion performance weight
+            float totalReward = baseReward + (companionBonus + formationBonus) * companionPerformanceWeight;
+            
+            // Adaptive learning rate based on recent performance
+            UpdateAdaptiveLearning(totalReward);
+            
+            return totalReward;
+        }
+
+        /// <summary>
+        /// Update adaptive learning parameters based on recent performance.
+        /// </summary>
+        private void UpdateAdaptiveLearning(float episodeReward)
+        {
+            recentPerformanceScores.Enqueue(episodeReward);
+            
+            // Keep only recent scores within the window
+            while (recentPerformanceScores.Count > adaptiveTrainingWindow)
+            {
+                recentPerformanceScores.Dequeue();
+            }
+            
+            // Calculate average recent performance
+            if (recentPerformanceScores.Count >= adaptiveTrainingWindow)
+            {
+                float avgPerformance = recentPerformanceScores.Average();
+                float normalizedPerformance = Math.Max(0f, Math.Min(1f, avgPerformance / 100f));
+                
+                // Adjust learning rate based on performance
+                if (normalizedPerformance > performanceThreshold)
+                {
+                    // Good performance - reduce learning rate for stability
+                    config.LearningRate = Math.Max(0.0001f, config.LearningRate * 0.95f);
+                    config.ExplorationRate = Math.Max(0.05f, config.ExplorationRate * 0.98f);
+                }
+                else
+                {
+                    // Poor performance - increase learning rate for faster adaptation
+                    config.LearningRate = Math.Min(0.01f, config.LearningRate * 1.02f);
+                    config.ExplorationRate = Math.Min(0.3f, config.ExplorationRate * 1.01f);
+                }
+                
+                Console.WriteLine($"🔧 Adaptive training: LR={config.LearningRate:F6}, Exploration={config.ExplorationRate:F3}, AvgPerf={avgPerformance:F2}");
+            }
         }
     }
 }

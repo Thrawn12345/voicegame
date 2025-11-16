@@ -71,6 +71,16 @@ namespace VoiceGame
                         RunAutoTrainer();
                         return;
 
+                    case "dodge":
+                        // Run specialized dodge training
+                        RunDodgeTraining();
+                        return;
+
+                    case "range":
+                        // Run shooting range training system
+                        RunShootingRange();
+                        return;
+
                     case "models":
                         // Show current AI models
                         var modelManager = new ModelManager();
@@ -132,6 +142,106 @@ namespace VoiceGame
             }
         }
 
+        private static void RunDodgeTraining()
+        {
+            Console.Clear();
+            Console.WriteLine("╔══════════════════════════════════════════════════════╗");
+            Console.WriteLine("║              DODGE TRAINING SYSTEM                   ║");
+            Console.WriteLine("║   Specialized Movement & Bullet Dodging Training    ║");
+            Console.WriteLine("╚══════════════════════════════════════════════════════╝\n");
+
+            try
+            {
+                var config = new DodgeTrainingSystem.DodgeTrainingConfig
+                {
+                    TrainPlayerDodging = true,
+                    TrainCompanionCoordination = true,
+                    IncludeObstacles = true,
+                    EmphasizeFormationMaintenance = true,
+                    BulletDensity = 1.2f, // Slightly higher bullet density for challenge
+                    TrainingDuration = TimeSpan.FromHours(3) // 3 hours of focused training
+                };
+
+                Console.WriteLine("🎯 Configuration:");
+                Console.WriteLine($"   • Player Dodge Training: {config.TrainPlayerDodging}");
+                Console.WriteLine($"   • Companion Coordination: {config.TrainCompanionCoordination}");
+                Console.WriteLine($"   • Obstacle Avoidance: {config.IncludeObstacles}");
+                Console.WriteLine($"   • Formation Maintenance: {config.EmphasizeFormationMaintenance}");
+                Console.WriteLine($"   • Bullet Density: {(config.BulletDensity * 100):F0}%");
+                Console.WriteLine($"   • Training Duration: {config.TrainingDuration.TotalHours:F1} hours\n");
+
+                Console.WriteLine("Press Ctrl+C to stop training early.\n");
+
+                var dodgeTrainer = new DodgeTrainingSystem();
+                dodgeTrainer.RunDodgeTraining(config);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\n❌ Error during dodge training: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"   Inner exception: {ex.InnerException.Message}");
+                }
+            }
+        }
+
+        private static void RunShootingRange()
+        {
+            Console.Clear();
+            Console.WriteLine("================================================================");
+            Console.WriteLine("                    SHOOTING RANGE SYSTEM                     ");
+            Console.WriteLine("        Advanced Shooting & Dodging Training Cycles          ");
+            Console.WriteLine("================================================================\n");
+
+            try
+            {
+                var config = new ShootingRangeSystem.ShootingRangeConfig
+                {
+                    ShootingEpisodesPerCycle = 40,
+                    DodgingEpisodesPerCycle = 40,
+                    TotalTrainingCycles = 25, // 25 cycles = 2000 episodes total
+                    TrainPlayerShooting = true,
+                    TrainCompanionShooting = true,
+                    TrainEnemyDodging = true,
+                    EnemyDodgingLearningRate = 0.015f,
+                    CompanionCount = 3,
+                    EnemyCount = 5
+                };
+
+                Console.WriteLine("Configuration Summary:");
+                Console.WriteLine($"   Total Cycles: {config.TotalTrainingCycles}");
+                Console.WriteLine($"   Episodes per Cycle: {config.ShootingEpisodesPerCycle + config.DodgingEpisodesPerCycle}");
+                Console.WriteLine($"   Total Episodes: {config.TotalTrainingCycles * (config.ShootingEpisodesPerCycle + config.DodgingEpisodesPerCycle)}");
+                Console.WriteLine($"   Companions: {config.CompanionCount}");
+                Console.WriteLine($"   Target Enemies: {config.EnemyCount}");
+                Console.WriteLine($"   Enemy Learning Rate: {config.EnemyDodgingLearningRate:P1}\n");
+
+                Console.WriteLine("Training Phases per Cycle:");
+                Console.WriteLine($"   1. Shooting Training: {config.ShootingEpisodesPerCycle} episodes");
+                Console.WriteLine($"   2. Dodging Training: {config.DodgingEpisodesPerCycle} episodes");
+                Console.WriteLine($"   3. AI Neural Network Training");
+                Console.WriteLine($"   4. Enemy Learning Update\n");
+
+                Console.WriteLine("Press Ctrl+C to stop training early.\n");
+
+                var shootingRange = new ShootingRangeSystem();
+                var results = shootingRange.RunShootingRangeTraining(config);
+
+                Console.WriteLine("\nTraining Results Summary:");
+                Console.WriteLine($"Final Shooting Accuracy: {results.AverageShootingAccuracy:P1}");
+                Console.WriteLine($"Final Dodging Success: {results.AverageDodgingSuccessRate:P1}");
+                Console.WriteLine($"Completed Cycles: {results.CompletedCycles}/{config.TotalTrainingCycles}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\nError during shooting range training: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                }
+            }
+        }
+
         private static void PrintCommandHelp()
         {
             Console.WriteLine("\n╔════════════════════════════════════════════╗");
@@ -151,6 +261,13 @@ namespace VoiceGame
             Console.WriteLine("  dotnet run -- analyze       View training data statistics");
             Console.WriteLine("  dotnet run -- export        Export data for ML frameworks");
             Console.WriteLine("  dotnet run -- auto          Run infinite AI vs AI training");
+            Console.WriteLine("  dotnet run -- dodge         Run specialized dodge & movement training");
+            Console.WriteLine("  dotnet run -- range         Run shooting range with alternating training cycles");
+            Console.WriteLine("");
+            Console.WriteLine("📊 REPORTING SYSTEM:");
+            Console.WriteLine("  All training modes now generate detailed hourly JSON reports");
+            Console.WriteLine("  Reports are saved to: ./training_reports/");
+            Console.WriteLine("  Each report includes: performance metrics, AI progress, recommendations");
             Console.WriteLine("  dotnet run -- interactive   Launch interactive trainer menu\n");
 
             Console.WriteLine("MODEL MANAGEMENT:");

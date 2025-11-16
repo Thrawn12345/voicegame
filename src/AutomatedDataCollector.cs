@@ -19,6 +19,7 @@ namespace VoiceGame
         private int totalExperiencesCollected = 0;
         private DateTime sessionStart;
         private TimeSpan targetDuration;
+        private List<Companion>? companions;
 
         // Simulation parameters
         private const int SIMULATION_WIDTH = 800;
@@ -103,6 +104,18 @@ namespace VoiceGame
             int experiencesInEpisode = 0;
             int stepsInEpisode = random.Next(MIN_STEPS_PER_EPISODE, MAX_STEPS_PER_EPISODE);
 
+            // Initialize companions for this episode (2-3 companions)
+            companions = new List<Companion>();
+            int companionCount = random.Next(2, 4);
+            for (int i = 0; i < companionCount; i++)
+            {
+                var companionPos = new System.Drawing.PointF(
+                    random.Next(50, SIMULATION_WIDTH - 50),
+                    random.Next(50, SIMULATION_HEIGHT - 50)
+                );
+                companions.Add(new Companion(companionPos));
+            }
+
             // Simulate random game state
             var playerPos = new System.Drawing.PointF(
                 random.Next(100, SIMULATION_WIDTH - 100),
@@ -118,13 +131,18 @@ namespace VoiceGame
                 var lasers = GenerateRandomLasers(1, 4);
                 bool gameOver = lives <= 0;
 
-                // Encode current state
+                // Encode current state with companion information
                 float[] state = collector.EncodeGameState(
                     playerPos, playerVel,
                     enemies,
                     lasers,
                     lives, gameOver,
-                    SIMULATION_WIDTH, SIMULATION_HEIGHT
+                    SIMULATION_WIDTH, SIMULATION_HEIGHT,
+                    null, // targetPos
+                    companions,
+                    FormationType.Line, // Default formation
+                    CalculateFormationThreatLevel(enemies),
+                    IsCompanionFireSupportActive()
                 );
 
                 // Choose random action (with slight bias toward movement)
@@ -138,14 +156,22 @@ namespace VoiceGame
                 // Update simulated state
                 playerPos = UpdatePlayerPosition(playerPos, action);
                 lives = random.Next(100) < 5 ? lives - 1 : lives;  // 5% chance of hit
+                
+                // Update companion states (simulate their behavior)
+                UpdateCompanionsSimulation(playerPos, enemies);
 
-                // Encode next state
+                // Encode next state with companion information
                 float[] nextState = collector.EncodeGameState(
                     playerPos, playerVel,
                     enemies,
                     lasers,
                     lives, gameOver || lives <= 0,
-                    SIMULATION_WIDTH, SIMULATION_HEIGHT
+                    SIMULATION_WIDTH, SIMULATION_HEIGHT,
+                    null, // targetPos
+                    companions,
+                    FormationType.Line, // Default formation
+                    CalculateFormationThreatLevel(enemies),
+                    IsCompanionFireSupportActive()
                 );
 
                 // Record experience with simulated confidence
@@ -231,28 +257,107 @@ namespace VoiceGame
         {
             float reward = 0f;
 
-            // Survival reward
-            reward += 0.1f;
+            // Enhanced survival reward for companion coordination
+            reward += 0.15f;
 
-            // Enemy proximity penalty (discourage staying near enemies)
+            // Enemy proximity penalty with companion protection bonus
             if (enemyCount > 0)
             {
-                reward -= 0.05f * enemyCount;
+                float baseProximityPenalty = 0.05f * enemyCount;
+                // Reduced penalty if we have companions (they provide protection)
+                float companionProtectionFactor = Math.Max(0.3f, 1.0f - (companions?.Count ?? 0) * 0.2f);
+                reward -= baseProximityPenalty * companionProtectionFactor;
             }
 
-            // Bonus for reaching end of episode
+            // Companion coordination rewards
+            if (companions?.Count > 0)
+            {
+                // Reward for maintaining companion formations
+                reward += 0.08f * companions.Count;
+                
+                // Bonus for companion fire support activity
+                int activelyShooting = 0;
+                foreach (var companion in companions)
+                {
+                    var timeSinceShot = DateTime.UtcNow - companion.LastShotTime;
+                    if (timeSinceShot.TotalSeconds < 3.0) activelyShooting++;
+                }
+                reward += 0.05f * activelyShooting;
+            }
+
+            // Bonus for reaching end of episode (higher with more companions alive)
             if (step == totalSteps - 1)
             {
-                reward += 1f;
+                float survivalBonus = 1f + (companions?.Count ?? 0) * 0.3f;
+                reward += survivalBonus;
             }
 
-            // Small penalty to discourage STOP action
+            // Strategic movement rewards - reduced penalty for STOP if near threats
             if (action == 8)
             {
-                reward -= 0.02f;
+                // Less penalty for stopping if many enemies nearby (defensive position)
+                float stopPenalty = enemyCount > 3 ? 0.01f : 0.03f;
+                reward -= stopPenalty;
+            }
+
+            // Target-based movement bonuses
+            if (action >= 9 && action <= 11) // TARGET_DIRECT, TARGET_SAFE, TARGET_DODGE
+            {
+                reward += 0.02f; // Small bonus for using advanced movement
             }
 
             return reward;
+        }
+
+        private float CalculateFormationThreatLevel(List<(System.Drawing.PointF pos, float radius)> enemies)
+        {
+            if (enemies.Count == 0) return 0f;
+            
+            // Simple threat assessment based on enemy density
+            float threatLevel = Math.Min(enemies.Count / 10f, 1f);
+            return threatLevel;
+        }
+
+        private bool IsCompanionFireSupportActive()
+        {
+            if (companions?.Count == 0) return false;
+            
+            // Simulate companion fire support activity
+            // In training, we randomly activate fire support to explore different scenarios
+            return random.Next(100) < 40; // 40% chance of active fire support
+        }
+
+        private void UpdateCompanionsSimulation(System.Drawing.PointF playerPos, List<(System.Drawing.PointF pos, float radius)> enemies)
+        {
+            if (companions == null) return;
+
+            // Remove companions occasionally to simulate losses
+            if (companions.Count > 1 && random.Next(1000) < 2) // 0.2% chance per step
+            {
+                companions.RemoveAt(random.Next(companions.Count));
+            }
+
+            // Update companion positions and shooting times
+            foreach (var companion in companions)
+            {
+                // Move companions toward formation position near player
+                var targetPos = new System.Drawing.PointF(
+                    playerPos.X + random.Next(-80, 81),
+                    playerPos.Y + random.Next(-80, 81)
+                );
+                
+                // Simulate movement toward formation
+                companion.Position = new System.Drawing.PointF(
+                    companion.Position.X + (targetPos.X - companion.Position.X) * 0.1f,
+                    companion.Position.Y + (targetPos.Y - companion.Position.Y) * 0.1f
+                );
+
+                // Simulate shooting behavior based on enemy proximity
+                if (enemies.Count > 0 && random.Next(100) < 15) // 15% chance to shoot each step
+                {
+                    companion.LastShotTime = DateTime.UtcNow;
+                }
+            }
         }
 
         private void PrintProgress()

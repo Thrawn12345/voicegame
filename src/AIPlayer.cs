@@ -50,7 +50,7 @@ namespace VoiceGame
         }
 
         /// <summary>
-        /// Get AI's recommended action based on current game state.
+        /// Get AI's recommended action based on game state.
         /// </summary>
         public string GetRecommendedAction(
             PointF playerPos,
@@ -60,7 +60,14 @@ namespace VoiceGame
             int lives,
             bool gameOver,
             int windowWidth,
-            int windowHeight)
+            int windowHeight,
+            PointF? targetPos = null,
+            List<EnemyBullet>? enemyBullets = null,
+            List<Obstacle>? obstacles = null,
+            List<Companion>? companions = null,
+            FormationType? formationType = null,
+            float formationThreatLevel = 0f,
+            bool companionFireSupport = false)
         {
             // Encode game state
             var enemyData = enemies.Select(e => (e.Position, (float)GameConstants.EnemyRadius)).ToList();
@@ -70,15 +77,20 @@ namespace VoiceGame
                 playerPos, playerVel,
                 enemyData, laserData,
                 lives, gameOver,
-                windowWidth, windowHeight
+                windowWidth, windowHeight,
+                targetPos,
+                companions,
+                formationType,
+                formationThreatLevel,
+                companionFireSupport
             );
 
             // Get action from model with epsilon-greedy exploration
             int actionIndex;
             if (!isEnabled || random.NextDouble() < explorationRate)
             {
-                // Random exploration
-                actionIndex = random.Next(9);
+                // Random exploration - include new target-based actions
+                actionIndex = random.Next(12);
             }
             else
             {
@@ -100,20 +112,32 @@ namespace VoiceGame
             int lives,
             bool gameOver,
             int windowWidth,
-            int windowHeight)
+            int windowHeight,
+            PointF? targetPos = null,
+            List<EnemyBullet>? enemyBullets = null,
+            List<Obstacle>? obstacles = null,
+            List<Companion>? companions = null,
+            FormationType? formationType = null,
+            float formationThreatLevel = 0f,
+            bool companionFireSupport = false)
         {
             string action = GetRecommendedAction(
                 playerPos, playerVel, enemies, lasers,
-                lives, gameOver, windowWidth, windowHeight
+                lives, gameOver, windowWidth, windowHeight, targetPos, enemyBullets, obstacles,
+                companions, formationType, formationThreatLevel, companionFireSupport
             );
-
-            return ActionToVelocity(action);
+            
+            return ActionToVelocity(action, playerPos, targetPos, enemies, 
+                enemyBullets ?? new List<EnemyBullet>(), 
+                obstacles ?? new List<Obstacle>(), windowWidth, windowHeight);
         }
 
         /// <summary>
         /// Convert action string to velocity vector.
         /// </summary>
-        private PointF ActionToVelocity(string action)
+        private PointF ActionToVelocity(string action, PointF? currentPos = null, PointF? targetPos = null, 
+            List<Enemy>? enemies = null, List<EnemyBullet>? bullets = null, List<Obstacle>? obstacles = null,
+            int windowWidth = 800, int windowHeight = 600)
         {
             int speed = GameConstants.PlayerSpeed;
 
@@ -128,8 +152,63 @@ namespace VoiceGame
                 "SOUTHEAST" => new PointF(speed, speed),
                 "SOUTHWEST" => new PointF(-speed, speed),
                 "STOP" => new PointF(0, 0),
+                "TARGET_DIRECT" => GetDirectTargetVelocity(currentPos, targetPos, speed),
+                "TARGET_SAFE" => GetSafeTargetVelocity(currentPos, targetPos, enemies, bullets, obstacles, windowWidth, windowHeight, speed),
+                "TARGET_DODGE" => GetDodgeTargetVelocity(currentPos, targetPos, enemies, bullets, obstacles, windowWidth, windowHeight, speed),
                 _ => new PointF(0, 0)
             };
+        }
+
+        /// <summary>
+        /// Get direct velocity toward target.
+        /// </summary>
+        private PointF GetDirectTargetVelocity(PointF? currentPos, PointF? targetPos, int speed)
+        {
+            if (!currentPos.HasValue || !targetPos.HasValue) return PointF.Empty;
+
+            float dx = targetPos.Value.X - currentPos.Value.X;
+            float dy = targetPos.Value.Y - currentPos.Value.Y;
+            float distance = (float)Math.Sqrt(dx * dx + dy * dy);
+
+            if (distance < 10f) return PointF.Empty;
+
+            return new PointF((dx / distance) * speed, (dy / distance) * speed);
+        }
+
+        /// <summary>
+        /// Get safe velocity toward target avoiding threats.
+        /// </summary>
+        private PointF GetSafeTargetVelocity(PointF? currentPos, PointF? targetPos, List<Enemy>? enemies, 
+            List<EnemyBullet>? bullets, List<Obstacle>? obstacles, int windowWidth, int windowHeight, int speed)
+        {
+            if (!currentPos.HasValue || !targetPos.HasValue) return PointF.Empty;
+
+            // Use pathfinding system if we have a reference to it
+            var pathfinding = new PathfindingSystem();
+            return pathfinding.GetOptimalVelocity(
+                currentPos.Value, targetPos.Value,
+                enemies ?? new List<Enemy>(),
+                bullets ?? new List<EnemyBullet>(),
+                obstacles ?? new List<Obstacle>(),
+                windowWidth, windowHeight
+            );
+        }
+
+        /// <summary>
+        /// Get evasive velocity toward target with extra dodging.
+        /// </summary>
+        private PointF GetDodgeTargetVelocity(PointF? currentPos, PointF? targetPos, List<Enemy>? enemies,
+            List<EnemyBullet>? bullets, List<Obstacle>? obstacles, int windowWidth, int windowHeight, int speed)
+        {
+            var safeVelocity = GetSafeTargetVelocity(currentPos, targetPos, enemies, bullets, obstacles, windowWidth, windowHeight, speed);
+            
+            // Add extra random evasion
+            var random = new Random();
+            float evasionFactor = 0.3f;
+            float evasionX = (float)(random.NextDouble() - 0.5) * speed * evasionFactor;
+            float evasionY = (float)(random.NextDouble() - 0.5) * speed * evasionFactor;
+
+            return new PointF(safeVelocity.X + evasionX, safeVelocity.Y + evasionY);
         }
 
         /// <summary>

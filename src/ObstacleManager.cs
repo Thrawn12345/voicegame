@@ -12,12 +12,31 @@ namespace VoiceGame
 
         public IReadOnlyList<Obstacle> Obstacles => obstacles;
 
+        /// <summary>
+        /// Get obstacles as a list for pathfinding calculations.
+        /// </summary>
+        public List<Obstacle> GetObstacles() => obstacles.ToList();
+
         public void GenerateObstacles(Size screenSize, PointF playerPosition)
         {
             obstacles.Clear();
 
-            // Generate 5-8 random rectangular obstacles
-            int obstacleCount = random.Next(5, 9);
+            // Scale obstacle count based on screen size
+            int baseObstacles = 8;
+            int screenArea = screenSize.Width * screenSize.Height;
+            int standardArea = 800 * 600; // Reference screen size
+            
+            float scaleFactor = (float)screenArea / standardArea;
+            int maxObstacles = (int)(baseObstacles * Math.Sqrt(scaleFactor)) + 3;
+            int obstacleCount = random.Next(baseObstacles, Math.Max(baseObstacles + 1, maxObstacles + 1));
+            
+            Console.WriteLine($"🏗️ Generating {obstacleCount} obstacles for {screenSize.Width}x{screenSize.Height} screen");
+
+            // Divide screen into grid for better distribution
+            int gridCols = (int)Math.Ceiling(Math.Sqrt(obstacleCount * 1.2));
+            int gridRows = (int)Math.Ceiling((float)obstacleCount / gridCols);
+            float cellWidth = (float)screenSize.Width / gridCols;
+            float cellHeight = (float)screenSize.Height / gridRows;
 
             for (int i = 0; i < obstacleCount; i++)
             {
@@ -27,13 +46,24 @@ namespace VoiceGame
 
                 do
                 {
-                    // Random size between 30x30 and 80x80
-                    float width = random.Next(30, 81);
-                    float height = random.Next(30, 81);
+                    // Calculate grid position for this obstacle
+                    int gridX = i % gridCols;
+                    int gridY = i / gridCols;
+                    
+                    // Random size between 25x25 and 65x65 (smaller for better distribution)
+                    float width = random.Next(25, 66);
+                    float height = random.Next(25, 66);
 
-                    // Random position with margins from edges
-                    float x = random.Next(50, screenSize.Width - 50 - (int)width);
-                    float y = random.Next(50, screenSize.Height - 50 - (int)height);
+                    // Position within grid cell with some randomness
+                    float cellOffsetX = random.Next(10, (int)(cellWidth * 0.7f));
+                    float cellOffsetY = random.Next(10, (int)(cellHeight * 0.7f));
+                    
+                    float x = gridX * cellWidth + cellOffsetX;
+                    float y = gridY * cellHeight + cellOffsetY;
+                    
+                    // Ensure stays within bounds
+                    x = Math.Max(40, Math.Min(x, screenSize.Width - width - 40));
+                    y = Math.Max(40, Math.Min(y, screenSize.Height - height - 40));
 
                     obstacle = new Obstacle(new PointF(x, y), new SizeF(width, height));
                     attempts++;

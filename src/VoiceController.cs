@@ -128,6 +128,33 @@ namespace VoiceGame
             synthesizer.SpeakAsync(text);
         }
 
+        /// <summary>
+        /// Enable or disable voice recognition.
+        /// </summary>
+        public void SetEnabled(bool enabled)
+        {
+            if (recognizer != null)
+            {
+                try
+                {
+                    if (enabled)
+                    {
+                        recognizer.RecognizeAsync(RecognizeMode.Multiple);
+                        Console.WriteLine("🎤 Voice control ENABLED");
+                    }
+                    else
+                    {
+                        recognizer.RecognizeAsyncCancel();
+                        Console.WriteLine("🔇 Voice control DISABLED");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Error toggling voice recognition: {ex.Message}");
+                }
+            }
+        }
+
         public void Dispose()
         {
             recognizer?.Dispose();

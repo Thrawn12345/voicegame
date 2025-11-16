@@ -12,7 +12,7 @@ namespace VoiceGame
         // Enemy settings
         public const int EnemyRadius = 12;
         public const float EnemySpeed = PlayerSpeed; // Same speed as player
-        public const int EnemyBulletSpeed = LaserSpeed; // Same bullet speed as player
+        public const int EnemyBulletSpeed = LaserSpeed + 4; // Faster than player bullets (12 vs 8)
         public const int EnemyShootCooldownMs = 2000; // 2 seconds between shots
         public const int EnemyShootRange = 200; // pixels
         public const int EnemyFlankingDistance = 100; // Distance for flanking behavior

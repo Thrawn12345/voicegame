@@ -1,10 +1,10 @@
 {
   "config": {
     "learning_rate": 0.001,
-    "discount_factor": 0.99,
+    "discount_factor": 0.95,
     "exploration_rate": 0.1,
-    "batch_size": 32,
-    "hidden_layer_size": 128,
+    "batch_size": 64,
+    "hidden_layer_size": 256,
     "action_space_size": 11,
     "state_space_size": 26
   },
@@ -318,7 +318,7 @@
       0
     ]
   ],
-  "export_date": "2025-11-12T20:46:02.4833974Z",
+  "export_date": "2025-11-15T20:52:56.6259932Z",
   "metrics": {
     "episodes_processed": 0,
     "experiences_processed": 0,

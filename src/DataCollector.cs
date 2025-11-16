@@ -35,7 +35,12 @@ namespace VoiceGame
         public float[] EncodeGameState(PointF playerPos, PointF playerVel, 
             List<(PointF pos, float radius)> enemies,
             List<(PointF pos, PointF vel)> lasers,
-            int lives, bool gameOver, int windowWidth, int windowHeight)
+            int lives, bool gameOver, int windowWidth, int windowHeight,
+            PointF? targetPos = null,
+            List<Companion>? companions = null,
+            FormationType? formationType = null,
+            float formationThreatLevel = 0f,
+            bool companionFireSupport = false)
         {
             List<float> state = new List<float>();
 
@@ -80,21 +85,99 @@ namespace VoiceGame
             if (lasers.Count > 0)
             {
                 float minDist = float.MaxValue;
+                PointF closestLaserVel = new PointF(0, 0);
                 foreach (var laser in lasers)
                 {
                     float dx = laser.pos.X - playerPos.X;
                     float dy = laser.pos.Y - playerPos.Y;
                     float dist = (float)Math.Sqrt(dx * dx + dy * dy);
-                    minDist = Math.Min(minDist, dist);
+                    if (dist < minDist)
+                    {
+                        minDist = dist;
+                        closestLaserVel = laser.vel;
+                    }
                 }
                 state.Add(Math.Min(minDist / 200f, 1f));  // Closest laser distance
+                state.Add(closestLaserVel.X / 10f);  // Closest laser velocity X
+                state.Add(closestLaserVel.Y / 10f);  // Closest laser velocity Y
             }
             else
             {
                 state.Add(1f);  // No lasers
+                state.Add(0f);  // No laser velocity X
+                state.Add(0f);  // No laser velocity Y
             }
 
             state.Add(gameOver ? 1f : 0f);
+
+            // Target-based movement features (4 values)
+            if (targetPos.HasValue)
+            {
+                float targetDx = (targetPos.Value.X - playerPos.X) / windowWidth;
+                float targetDy = (targetPos.Value.Y - playerPos.Y) / windowHeight;
+                float targetDistance = (float)Math.Sqrt(targetDx * targetDx + targetDy * targetDy);
+                
+                state.Add(targetDx);  // Target X offset (normalized)
+                state.Add(targetDy);  // Target Y offset (normalized)
+                state.Add(Math.Min(targetDistance, 1f));  // Distance to target
+                state.Add(1f);  // Has target flag
+            }
+            else
+            {
+                state.Add(0f);  // No target X
+                state.Add(0f);  // No target Y
+                state.Add(0f);  // No distance
+                state.Add(0f);  // No target flag
+            }
+
+            // Enhanced companion features (8 values) - formation, coordination, and survival state
+            state.Add((companions?.Count ?? 0) / 3f);  // Companion count (normalized)
+            
+            if (companions?.Count > 0)
+            {
+                // Average companion distance from player
+                float avgCompanionDist = 0f;
+                int livingCompanions = 0;
+                int activelyShooting = 0;
+                
+                foreach (var companion in companions)
+                {
+                    float dx = companion.Position.X - playerPos.X;
+                    float dy = companion.Position.Y - playerPos.Y;
+                    float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                    avgCompanionDist += Math.Min(dist / 100f, 1f);  // Normalized distance
+                    
+                    // Check if companion is actively shooting (within last 2 seconds)
+                    var timeSinceShot = DateTime.UtcNow - companion.LastShotTime;
+                    if (timeSinceShot.TotalSeconds < 2.0) activelyShooting++;
+                    
+                    livingCompanions++;
+                }
+                
+                if (livingCompanions > 0)
+                {
+                    avgCompanionDist /= livingCompanions;
+                }
+                
+                state.Add(avgCompanionDist);  // Average companion distance
+                state.Add(livingCompanions / 3f);  // Living companions ratio
+                state.Add(formationType.HasValue ? (int)formationType.Value / 4f : 0f);  // Formation type
+                state.Add(formationThreatLevel);  // Formation threat assessment
+                state.Add(companionFireSupport ? 1f : 0f);  // Companion fire support active
+                state.Add(activelyShooting / 3f);  // Actively shooting companions ratio
+                state.Add(Math.Min(companions.Count / 3f, 1f));  // Companion survival effectiveness
+            }
+            else
+            {
+                // No companions
+                state.Add(0f);  // No average distance
+                state.Add(0f);  // No living companions
+                state.Add(0f);  // No formation
+                state.Add(0f);  // No threat assessment
+                state.Add(0f);  // No fire support
+                state.Add(0f);  // No active shooting
+                state.Add(0f);  // No survival effectiveness
+            }
 
             return state.ToArray();
         }
@@ -151,7 +234,7 @@ namespace VoiceGame
             return action switch
             {
                 0 => "NORTH",
-                1 => "SOUTH",
+                1 => "SOUTH", 
                 2 => "EAST",
                 3 => "WEST",
                 4 => "NORTHEAST",
@@ -159,6 +242,9 @@ namespace VoiceGame
                 6 => "SOUTHEAST",
                 7 => "SOUTHWEST",
                 8 => "STOP",
+                9 => "TARGET_DIRECT",     // Move directly toward target
+                10 => "TARGET_SAFE",     // Move toward target avoiding threats
+                11 => "TARGET_DODGE",    // Move toward target with evasive maneuvers
                 _ => "UNKNOWN"
             };
         }
@@ -179,6 +265,9 @@ namespace VoiceGame
                 "SOUTHEAST" => 6,
                 "SOUTHWEST" => 7,
                 "STOP" => 8,
+                "TARGET_DIRECT" => 9,
+                "TARGET_SAFE" => 10,
+                "TARGET_DODGE" => 11,
                 _ => 8  // Default to stop
             };
         }

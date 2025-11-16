@@ -20,6 +20,7 @@ namespace VoiceGame
         private ObstacleManager obstacleManager;
         private AIShootingAgent aiShootingAgent;
         private TrainingDataCollector trainingCollector;
+        private HourlyReportingSystem reportingSystem;
         private Random random;
 
         // Game state
@@ -55,6 +56,7 @@ namespace VoiceGame
             enemyLearning = new EnemyLearningAgent(epsilon: 0.3f);
             aiShootingAgent = new AIShootingAgent();
             trainingCollector = new TrainingDataCollector();
+            reportingSystem = new HourlyReportingSystem();
             sessionStart = DateTime.Now;
 
             // Setup model management and migrate old models
@@ -73,6 +75,9 @@ namespace VoiceGame
         {
             Console.WriteLine("🤖 Starting infinite AI vs AI training...");
             Console.WriteLine("   Press Ctrl+C to stop\n");
+            
+            // Start hourly reporting
+            reportingSystem.StartReporting();
 
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -83,11 +88,21 @@ namespace VoiceGame
                 // Periodically train AI models on collected experiences
                 if (episodeCount % trainingInterval == 0)
                 {
-                    Console.WriteLine("\n\n╔═══════════════════════════════════════════════╗");
+                    Console.WriteLine("\\n\\n╔═══════════════════════════════════════════════╗");
                     Console.WriteLine("║   🧠 TRAINING PHASE - Improving AI Models     ║");
                     Console.WriteLine("╚═══════════════════════════════════════════════╝");
                     TrainAllModels();
-                    Console.WriteLine("✅ Training phase complete. Resuming data collection...\n");
+                    Console.WriteLine("✅ Training phase complete. Resuming data collection...\\n");
+                    
+                    // Update reporting with training progress
+                    reportingSystem.UpdateMetrics(
+                        "Auto Training - AI vs AI",
+                        episodeCount,
+                        episodeCount * 300, // Estimated experiences per episode
+                        trainingCycles: episodeCount / trainingInterval,
+                        neuralNetworkLoss: 0.5f - (episodeCount / trainingInterval * 0.01f),
+                        achievement: $"Completed training cycle {episodeCount / trainingInterval}"
+                    );
                 }
 
                 // Save models periodically
@@ -101,8 +116,11 @@ namespace VoiceGame
                 await Task.Delay(10, cancellationToken);
             }
 
-            Console.WriteLine("\n🛑 Training stopped by user");
+            Console.WriteLine("\\n🛑 Training stopped by user");
             SaveAllModels();
+            
+            // Stop reporting and generate final report
+            reportingSystem.StopReporting();
             PrintStatistics();
         }
 
@@ -126,6 +144,17 @@ namespace VoiceGame
                 if (totalFrames % 1000 == 0)
                 {
                     Console.Write($"\rEpisode {episodeCount + 1} | Frame {frameCount} | Lives {lives} | Enemies {enemies.Count} | Destroyed {enemiesDestroyed}");
+                    
+                    // Update metrics every 10 episodes
+                    if (episodeCount % 10 == 0)
+                    {
+                        reportingSystem.UpdateMetrics(
+                            "Auto Training - AI vs AI",
+                            episodeCount,
+                            totalFrames,
+                            achievement: episodeCount % 100 == 0 ? $"Milestone: {episodeCount} episodes completed" : null
+                        );
+                    }
                 }
             }
 
