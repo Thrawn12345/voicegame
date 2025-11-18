@@ -89,30 +89,45 @@ namespace VoiceGame
                     var shootingResults = RunShootingPhase(config);
                     stats.ShootingAccuracyHistory.Add(shootingResults.accuracy);
                     
+                    // Phase 2: Dodging Training (Players/Companions learn to dodge, Enemies learn to shoot)
+                    Console.WriteLine($"  🏃 Phase 2: Dodging & Evasion Training ({config.DodgingEpisodesPerCycle} episodes)");
+                    var dodgingResults = RunDodgingPhase(config);
+                    stats.DodgingSuccessHistory.Add(dodgingResults.dodgeSuccess);
+                    
+                    // Phase 3: Full Game Training (Complete game simulation with bosses)
+                    Console.WriteLine($"  🎮 Phase 3: Full Game Simulation Training (10 episodes)");
+                    var gameResults = RunFullGamePhase(config);
+                    
+                    // Phase 4: AI Training and Model Updates
+                    Console.WriteLine($"  🧠 Phase 4: AI Training & Model Updates");
+                    RunAITrainingPhase(config);
+                    
+                    trainingCyclesCompleted++;
+                    
                     // Update reporting metrics
                     reportingSystem.UpdateMetrics(
-                        "Shooting Range - Shooting Phase",
-                        shootingEpisodesCompleted,
+                        $"Training Cycle {cycle + 1}",
+                        totalEpisodesCompleted,
                         totalEpisodesCompleted * 150, // Estimated experiences
-                        shootingResults.accuracy,
-                        shotsFired: shootingResults.shots,
-                        hits: shootingResults.hits,
-                        achievement: $"Shooting accuracy: {shootingResults.accuracy:P1}"
+                        (shootingResults.accuracy + dodgingResults.dodgeSuccess) / 2f,
+                        shotsFired: shootingResults.shots + gameResults.shots,
+                        hits: shootingResults.hits + gameResults.hits,
+                        achievement: $"Cycle {cycle + 1} complete - Shooting: {shootingResults.accuracy:P1}, Dodging: {dodgingResults.dodgeSuccess:P1}"
                     );
                     
                     // Phase 2: Dodging Training (Players/Companions learn to dodge, Enemies learn to shoot)
                     Console.WriteLine($"  🏃 Phase 2: Evasive Maneuvers Training ({config.DodgingEpisodesPerCycle} episodes)");
-                    var dodgingResults = RunDodgingPhase(config);
-                    stats.DodgingSuccessHistory.Add(dodgingResults.dodgeSuccess);
+                    var dodgingPhaseResults = RunDodgingPhase(config);
+                    stats.DodgingSuccessHistory.Add(dodgingPhaseResults.dodgeSuccess);
                     
                     // Update reporting metrics
                     reportingSystem.UpdateMetrics(
                         "Shooting Range - Dodging Phase",
                         dodgingEpisodesCompleted,
                         totalEpisodesCompleted * 150,
-                        dodgingSuccess: dodgingResults.dodgeSuccess,
+                        dodgingSuccess: dodgingPhaseResults.dodgeSuccess,
                         dodgeAttempts: 50, // Estimated
-                        successfulDodges: (int)(dodgingResults.dodgeSuccess * 50),
+                        successfulDodges: (int)(dodgingPhaseResults.dodgeSuccess * 50),
                         enemyAIImprovement: dodgingResults.enemyImprovement,
                         achievement: $"Dodge success: {dodgingResults.dodgeSuccess:P1}"
                     );
@@ -951,6 +966,159 @@ namespace VoiceGame
             
             Console.WriteLine($"\n💾 All training data saved to database.");
             Console.WriteLine($"🚀 Ready for deployment with enhanced AI!\n");
+        }
+        
+        /// <summary>
+        /// Run full game simulation phase with boss encounters.
+        /// </summary>
+        private (float accuracy, int shots, int hits) RunFullGamePhase(ShootingRangeConfig config)
+        {
+            int totalShots = 0;
+            int totalHits = 0;
+            
+            for (int episode = 0; episode < 10; episode++) // 10 full game episodes per cycle
+            {
+                var episodeResults = RunSingleFullGameEpisode(config, episode);
+                totalShots += episodeResults.shots;
+                totalHits += episodeResults.hits;
+                totalEpisodesCompleted++;
+            }
+            
+            float accuracy = totalShots > 0 ? (float)totalHits / totalShots : 0f;
+            Console.WriteLine($"    ✅ Full Game Phase Complete - Accuracy: {accuracy:P1}");
+            
+            return (accuracy, totalShots, totalHits);
+        }
+        
+        /// <summary>
+        /// Single full game episode with boss encounters.
+        /// </summary>
+        private (int shots, int hits) RunSingleFullGameEpisode(ShootingRangeConfig config, int episodeIndex)
+        {
+            int shots = 0;
+            int hits = 0;
+            int enemiesKilled = 0;
+            bool bossActive = false;
+            var bosses = new List<(PointF position, int health)>();
+            
+            // Simulate full game with boss spawning
+            var playerPos = new PointF(RANGE_WIDTH / 2f, RANGE_HEIGHT / 2f);
+            var enemies = InitializeEnemiesForGame(config.EnemyCount);
+            var companions = InitializeCompanionsForShooting(playerPos, config.CompanionCount);
+            
+            int stepCount = 300; // Longer episodes for full game
+            
+            for (int step = 0; step < stepCount; step++)
+            {
+                // Spawn boss every 15 enemy kills
+                if (enemiesKilled > 0 && enemiesKilled % GameConstants.BossSpawnInterval == 0 && !bossActive)
+                {
+                    var bossPos = new PointF(
+                        random.Next(GameConstants.BossRadius, RANGE_WIDTH - GameConstants.BossRadius),
+                        random.Next(GameConstants.BossRadius, RANGE_HEIGHT - GameConstants.BossRadius)
+                    );
+                    bosses.Add((bossPos, GameConstants.BossHealth));
+                    bossActive = true;
+                    Console.WriteLine($"    👹 Boss spawned at enemy kill #{enemiesKilled}!");
+                }
+                
+                // Player and companion shooting at enemies and bosses
+                var activeEnemies = enemies.Take(Math.Min(enemies.Count, 3)).ToList(); // Limit active enemies
+                var enemyList = activeEnemies.Select(e => (e.position, e.velocity, 0)).ToList(); // Convert to expected format
+                
+                if (ShouldPlayerShoot(playerPos, enemyList, step))
+                {
+                    shots++;
+                    if (random.Next(100) < 75) // 75% hit rate
+                    {
+                        hits++;
+                        enemiesKilled++;
+                    }
+                }
+                
+                // Boss combat
+                for (int i = bosses.Count - 1; i >= 0; i--)
+                {
+                    var boss = bosses[i];
+                    if (random.Next(100) < 60) // 60% hit rate on boss
+                    {
+                        shots++;
+                        if (random.Next(100) < 50)
+                        {
+                            hits++;
+                            boss.health--;
+                            if (boss.health <= 0)
+                            {
+                                bosses.RemoveAt(i);
+                                bossActive = bosses.Count > 0;
+                                Console.WriteLine($"    💀 Boss defeated!");
+                            }
+                            else
+                            {
+                                bosses[i] = (boss.position, boss.health);
+                            }
+                        }
+                    }
+                }
+                
+                // Replenish enemies if needed
+                if (enemies.Count < config.EnemyCount && step > 50)
+                {
+                    enemies.AddRange(InitializeEnemiesForGame(1));
+                }
+            }
+            
+            return (shots, hits);
+        }
+        
+        /// <summary>
+        /// AI training phase - update models based on collected data.
+        /// </summary>
+        private void RunAITrainingPhase(ShootingRangeConfig config)
+        {
+            // Train AI on collected shooting data
+            TrainAIOnCollectedData();
+            
+            // Update enemy learning models
+            enemyLearning.SaveModels();
+            
+            // Log training progress
+            Console.WriteLine($"    📊 Cycle {trainingCyclesCompleted}: Total Episodes: {totalEpisodesCompleted}, Shooting: {shootingEpisodesCompleted}, Dodging: {dodgingEpisodesCompleted}");
+            
+            Console.WriteLine($"    ✅ AI Training Phase Complete - Models updated");
+        }
+        
+        /// <summary>
+        /// Initialize enemies for full game simulation.
+        /// </summary>
+        private List<(PointF position, PointF velocity, string behavior)> InitializeEnemiesForGame(int count)
+        {
+            var enemies = new List<(PointF position, PointF velocity, string behavior)>();
+            
+            for (int i = 0; i < count; i++)
+            {
+                var pos = new PointF(
+                    random.Next(50, RANGE_WIDTH - 50),
+                    random.Next(50, RANGE_HEIGHT - 50)
+                );
+                
+                var vel = new PointF(
+                    (float)(random.NextDouble() - 0.5) * 2f,
+                    (float)(random.NextDouble() - 0.5) * 2f
+                );
+                
+                var behavior = random.Next(4) switch
+                {
+                    0 => "Aggressive",
+                    1 => "Flanking",
+                    2 => "Cautious",
+                    _ => "Ambush"
+                };
+                
+                enemies.Add((pos, vel, behavior));
+            }
+            
+            return enemies;
         }
     }
 }

@@ -14,6 +14,13 @@ namespace VoiceGame
     /// </summary>
     public class AutoTrainer
     {
+        public class AutoTrainerConfig
+        {
+            public int NumEpisodes { get; set; } = 100;
+            public int MaxStepsPerEpisode { get; set; } = 2000;
+            public bool IsHeadless { get; set; } = true;
+        }
+
         private AIPlayer playerAI;
         private EnemyLearningAgent enemyLearning;
         private GameLogic gameLogic;
@@ -534,6 +541,25 @@ namespace VoiceGame
             Console.WriteLine($"  Next save at:           Episode {(episodeCount / saveInterval + 1) * saveInterval}");
             Console.WriteLine("═══════════════════════════════════════════════\n");
             Console.WriteLine("🔄 Continuing training...\n");
+        }
+
+        public async Task RunTraining(AutoTrainerConfig config, CancellationToken cancellationToken)
+        {
+            Console.WriteLine($"🤖 Starting auto-training for {config.NumEpisodes} episodes...");
+            
+            for (int i = 0; i < config.NumEpisodes && !cancellationToken.IsCancellationRequested; i++)
+            {
+                RunEpisode();
+                episodeCount++;
+                
+                if (i % 10 == 0)
+                {
+                    Console.WriteLine($"   Auto-training episode {i + 1}/{config.NumEpisodes}...");
+                }
+            }
+            
+            Console.WriteLine("🤖 Auto-training complete.");
+            await Task.CompletedTask;
         }
     }
 }

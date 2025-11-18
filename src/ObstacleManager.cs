@@ -21,14 +21,13 @@ namespace VoiceGame
         {
             obstacles.Clear();
 
-            // Scale obstacle count based on screen size
-            int baseObstacles = 8;
+            // Generate more obstacles for increased challenge
             int screenArea = screenSize.Width * screenSize.Height;
             int standardArea = 800 * 600; // Reference screen size
             
             float scaleFactor = (float)screenArea / standardArea;
-            int maxObstacles = (int)(baseObstacles * Math.Sqrt(scaleFactor)) + 3;
-            int obstacleCount = random.Next(baseObstacles, Math.Max(baseObstacles + 1, maxObstacles + 1));
+            int obstacleCount = random.Next(GameConstants.MinObstacles, GameConstants.MaxObstacles + 1);
+            obstacleCount = (int)(obstacleCount * Math.Sqrt(scaleFactor)); // Scale with screen size
             
             Console.WriteLine($"🏗️ Generating {obstacleCount} obstacles for {screenSize.Width}x{screenSize.Height} screen");
 
@@ -50,9 +49,9 @@ namespace VoiceGame
                     int gridX = i % gridCols;
                     int gridY = i / gridCols;
                     
-                    // Random size between 25x25 and 65x65 (smaller for better distribution)
-                    float width = random.Next(25, 66);
-                    float height = random.Next(25, 66);
+                    // Random size using constants for consistency
+                    float width = random.Next(GameConstants.ObstacleMinSize, GameConstants.ObstacleMaxSize + 1);
+                    float height = random.Next(GameConstants.ObstacleMinSize, GameConstants.ObstacleMaxSize + 1);
 
                     // Position within grid cell with some randomness
                     float cellOffsetX = random.Next(10, (int)(cellWidth * 0.7f));

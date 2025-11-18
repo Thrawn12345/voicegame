@@ -34,6 +34,41 @@ namespace VoiceGame
             return Distance(bullet.Position, player.Position) < GameConstants.PlayerRadius + 3;
         }
 
+        public static bool CheckCompanionPlayerCollision(Companion companion, Player player)
+        {
+            return Distance(companion.Position, player.Position) < GameConstants.PlayerRadius + GameConstants.CompanionRadius;
+        }
+
+        public static bool CheckCompanionCompanionCollision(Companion companion1, Companion companion2)
+        {
+            return Distance(companion1.Position, companion2.Position) < GameConstants.CompanionRadius + GameConstants.CompanionRadius;
+        }
+
+        public static bool CheckCompanionEnemyCollision(Companion companion, Enemy enemy)
+        {
+            return Distance(companion.Position, enemy.Position) < GameConstants.CompanionRadius + GameConstants.EnemyRadius;
+        }
+
+        public static bool CheckBulletCompanionCollision(EnemyBullet bullet, Companion companion)
+        {
+            return Distance(bullet.Position, companion.Position) < GameConstants.CompanionRadius + 3;
+        }
+
+        public static bool CheckPlayerBossCollision(Player player, Boss boss)
+        {
+            return Distance(player.Position, boss.Position) < GameConstants.PlayerRadius + GameConstants.BossRadius;
+        }
+
+        public static bool CheckLaserBossCollision(Laser laser, Boss boss)
+        {
+            return Distance(laser.Position, boss.Position) < GameConstants.BossRadius + 3;
+        }
+
+        public static bool CheckCompanionBossCollision(Companion companion, Boss boss)
+        {
+            return Distance(companion.Position, boss.Position) < GameConstants.CompanionRadius + GameConstants.BossRadius;
+        }
+
         public static bool CheckObstacleCollision(PointF position, float radius, List<Obstacle> obstacles)
         {
             foreach (var obstacle in obstacles)

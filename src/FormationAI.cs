@@ -42,7 +42,7 @@ namespace VoiceGame
             {
                 // Calculate formation target position with survival AI
                 var baseFormationTarget = CalculateFormationPosition(companion, player.Position, currentFormation);
-                var survivalTarget = ApplySurvivalAI(companion, baseFormationTarget, enemies, enemyBullets, obstacles);
+                var survivalTarget = ApplySurvivalAI(companion, baseFormationTarget, enemies, enemyBullets, obstacles, player, companions);
                 
                 // Use pathfinding to navigate to survival-adjusted position
                 var optimalVelocity = pathfinding.GetOptimalVelocity(
@@ -55,10 +55,34 @@ namespace VoiceGame
                     windowHeight
                 );
 
-                // Update companion with new position and target
+                // Calculate new position
                 var newPosition = new PointF(
                     Math.Max(15, Math.Min(windowWidth - 15, companion.Position.X + optimalVelocity.X)),
                     Math.Max(15, Math.Min(windowHeight - 15, companion.Position.Y + optimalVelocity.Y))
+                );
+
+                // Final validation: Ensure companion stays within 70-pixel circle and doesn't get too close to player
+                const float maxCircleRadius = 70f;
+                const float minPlayerDistance = GameConstants.PlayerRadius + 15f; // Minimum safe distance from player
+                
+                float distanceToPlayer = Distance(newPosition, player.Position);
+                
+                // First ensure minimum distance from player
+                if (distanceToPlayer < minPlayerDistance && distanceToPlayer > 0)
+                {
+                    // Push companion away from player to maintain minimum distance
+                    float pushX = (newPosition.X - player.Position.X) / distanceToPlayer * minPlayerDistance;
+                    float pushY = (newPosition.Y - player.Position.Y) / distanceToPlayer * minPlayerDistance;
+                    newPosition = new PointF(player.Position.X + pushX, player.Position.Y + pushY);
+                }
+                
+                // Then ensure companion stays within 70-pixel circle
+                newPosition = ConstrainToCircle(newPosition, player.Position, maxCircleRadius);
+                
+                // Ensure adjusted position is still within screen bounds
+                newPosition = new PointF(
+                    Math.Max(15, Math.Min(windowWidth - 15, newPosition.X)),
+                    Math.Max(15, Math.Min(windowHeight - 15, newPosition.Y))
                 );
 
                 updatedCompanions.Add(companion with 
@@ -101,14 +125,16 @@ namespace VoiceGame
 
         /// <summary>
         /// Calculate the ideal position for a companion in the current formation.
+        /// Companions are constrained to stay within a 70-pixel radius circle around the player.
         /// </summary>
         private PointF CalculateFormationPosition(Companion companion, PointF playerPosition, FormationType formation)
         {
-            float spacing = 100f; // Increased spacing for looser formation
-            float offset = 80f;   // Increased distance from player
-            float variation = random.Next(-20, 21); // Add random variation for organic feel
+            const float maxRadius = 70f; // Maximum distance from player (70-pixel circle)
+            float spacing = 50f; // Reduced spacing to fit within circle
+            float offset = 45f;   // Reduced distance from player to fit within 70px radius
+            float variation = random.Next(-10, 11); // Reduced variation to stay within bounds
 
-            return formation switch
+            var targetPosition = formation switch
             {
                 FormationType.Line => companion.Role switch
                 {
@@ -122,7 +148,7 @@ namespace VoiceGame
                 {
                     CompanionRole.LeftFlank => new PointF(playerPosition.X - spacing/2 + variation, playerPosition.Y + offset + variation * 0.3f),
                     CompanionRole.RightFlank => new PointF(playerPosition.X + spacing/2 + variation, playerPosition.Y + offset + variation * 0.3f),
-                    CompanionRole.Rear => new PointF(playerPosition.X + variation * 0.5f, playerPosition.Y + offset * 1.5f + variation),
+                    CompanionRole.Rear => new PointF(playerPosition.X + variation * 0.5f, playerPosition.Y + offset * 1.2f + variation),
                     _ => playerPosition
                 },
 
@@ -154,30 +180,34 @@ namespace VoiceGame
                 FormationType.Adaptive => CalculateAdaptivePosition(companion, playerPosition),
                 _ => playerPosition
             };
+
+            // Ensure the target position is within the 70-pixel radius circle
+            return ConstrainToCircle(targetPosition, playerPosition, maxRadius);
         }
 
         /// <summary>
         /// Calculate adaptive formation position based on AI analysis.
+        /// Positions are constrained within 70-pixel radius.
         /// </summary>
         private PointF CalculateAdaptivePosition(Companion companion, PointF playerPosition)
         {
             // AI decides best position based on companion role and current situation
-            float spacing = 50f;
-            float dynamicOffset = 30f + (companion.Id * 15f); // Varying distances
+            float spacing = 40f; // Reduced to fit within 70px radius
+            float dynamicOffset = 25f + (companion.Id * 10f); // Reduced varying distances
 
             return companion.Role switch
             {
                 CompanionRole.LeftFlank => new PointF(
-                    playerPosition.X - spacing - random.Next(-10, 10),
-                    playerPosition.Y + random.Next(-20, 20)
+                    playerPosition.X - spacing - random.Next(-5, 5),
+                    playerPosition.Y + random.Next(-15, 15)
                 ),
                 CompanionRole.RightFlank => new PointF(
-                    playerPosition.X + spacing + random.Next(-10, 10),
-                    playerPosition.Y + random.Next(-20, 20)
+                    playerPosition.X + spacing + random.Next(-5, 5),
+                    playerPosition.Y + random.Next(-15, 15)
                 ),
                 CompanionRole.Rear => new PointF(
-                    playerPosition.X + random.Next(-15, 15),
-                    playerPosition.Y + dynamicOffset + random.Next(-10, 10)
+                    playerPosition.X + random.Next(-10, 10),
+                    playerPosition.Y + dynamicOffset + random.Next(-5, 5)
                 ),
                 _ => playerPosition
             };
@@ -188,8 +218,8 @@ namespace VoiceGame
         /// </summary>
         public bool ShouldCompanionShoot(Companion companion, List<Enemy> enemies, Player player)
         {
-            if (DateTime.UtcNow - companion.LastShotTime < TimeSpan.FromMilliseconds(800))
-                return false; // Rate limiting
+            if (DateTime.UtcNow - companion.LastShotTime < TimeSpan.FromMilliseconds(GameConstants.CompanionShootCooldownMs))
+                return false; // Rate limiting same as player
 
             // Find nearest enemy
             var nearestEnemy = enemies.OrderBy(e => Distance(e.Position, companion.Position)).FirstOrDefault();
@@ -214,10 +244,37 @@ namespace VoiceGame
         /// <summary>
         /// Apply survival AI to adjust target position for threat avoidance.
         /// </summary>
-        private PointF ApplySurvivalAI(Companion companion, PointF targetPosition, List<Enemy> enemies, List<EnemyBullet> bullets, List<Obstacle> obstacles)
+        private PointF ApplySurvivalAI(Companion companion, PointF targetPosition, List<Enemy> enemies, List<EnemyBullet> bullets, List<Obstacle> obstacles, Player player, List<Companion> otherCompanions)
         {
             var adjustedTarget = targetPosition;
             float survivalRadius = 60f; // Radius for threat avoidance
+            
+            // Avoid player - prevent phasing through
+            float distanceToPlayer = Distance(targetPosition, player.Position);
+            float playerAvoidanceRadius = GameConstants.PlayerRadius + 15f; // Player radius plus buffer
+            if (distanceToPlayer < playerAvoidanceRadius && distanceToPlayer > 0)
+            {
+                // Push target away from player
+                float pushX = (targetPosition.X - player.Position.X) / distanceToPlayer * 25f;
+                float pushY = (targetPosition.Y - player.Position.Y) / distanceToPlayer * 25f;
+                adjustedTarget = new PointF(adjustedTarget.X + pushX, adjustedTarget.Y + pushY);
+            }
+            
+            // Avoid other companions - prevent phasing through each other
+            foreach (var otherCompanion in otherCompanions)
+            {
+                if (otherCompanion.Id == companion.Id) continue; // Skip self
+                
+                float distanceToOther = Distance(targetPosition, otherCompanion.Position);
+                float companionAvoidanceRadius = GameConstants.CompanionRadius + GameConstants.CompanionRadius + 10f; // Two radii plus buffer
+                if (distanceToOther < companionAvoidanceRadius && distanceToOther > 0)
+                {
+                    // Push target away from other companion
+                    float pushX = (targetPosition.X - otherCompanion.Position.X) / distanceToOther * 20f;
+                    float pushY = (targetPosition.Y - otherCompanion.Position.Y) / distanceToOther * 20f;
+                    adjustedTarget = new PointF(adjustedTarget.X + pushX, adjustedTarget.Y + pushY);
+                }
+            }
             
             // Avoid nearby enemies
             foreach (var enemy in enemies)
@@ -280,6 +337,29 @@ namespace VoiceGame
             }
             
             return adjustedTarget;
+        }
+
+        /// <summary>
+        /// Constrains a target position to stay within a circular area around the center point.
+        /// </summary>
+        private static PointF ConstrainToCircle(PointF targetPosition, PointF centerPosition, float maxRadius)
+        {
+            float distance = Distance(targetPosition, centerPosition);
+            
+            if (distance <= maxRadius)
+            {
+                return targetPosition; // Already within circle
+            }
+            
+            // Calculate direction from center to target
+            float directionX = (targetPosition.X - centerPosition.X) / distance;
+            float directionY = (targetPosition.Y - centerPosition.Y) / distance;
+            
+            // Place at maximum radius in the same direction
+            return new PointF(
+                centerPosition.X + directionX * maxRadius,
+                centerPosition.Y + directionY * maxRadius
+            );
         }
 
         private static float Distance(PointF p1, PointF p2)

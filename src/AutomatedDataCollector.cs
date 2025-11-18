@@ -113,7 +113,10 @@ namespace VoiceGame
                     random.Next(50, SIMULATION_WIDTH - 50),
                     random.Next(50, SIMULATION_HEIGHT - 50)
                 );
-                companions.Add(new Companion(companionPos));
+                var companionVel = new System.Drawing.PointF(0, 0);
+                var companionRole = (CompanionRole)(i % 3); // Cycle through roles
+                var formationTarget = companionPos;
+                companions.Add(new Companion(companionPos, companionVel, i, companionRole, formationTarget, DateTime.UtcNow));
             }
 
             // Simulate random game state
@@ -338,8 +341,10 @@ namespace VoiceGame
             }
 
             // Update companion positions and shooting times
-            foreach (var companion in companions)
+            for (int i = 0; i < companions.Count; i++)
             {
+                var companion = companions[i];
+                
                 // Move companions toward formation position near player
                 var targetPos = new System.Drawing.PointF(
                     playerPos.X + random.Next(-80, 81),
@@ -347,16 +352,19 @@ namespace VoiceGame
                 );
                 
                 // Simulate movement toward formation
-                companion.Position = new System.Drawing.PointF(
+                var newPosition = new System.Drawing.PointF(
                     companion.Position.X + (targetPos.X - companion.Position.X) * 0.1f,
                     companion.Position.Y + (targetPos.Y - companion.Position.Y) * 0.1f
                 );
 
-                // Simulate shooting behavior based on enemy proximity
+                // Create updated companion with new position and possibly new shot time
+                var newLastShotTime = companion.LastShotTime;
                 if (enemies.Count > 0 && random.Next(100) < 15) // 15% chance to shoot each step
                 {
-                    companion.LastShotTime = DateTime.UtcNow;
+                    newLastShotTime = DateTime.UtcNow;
                 }
+
+                companions[i] = companion with { Position = newPosition, LastShotTime = newLastShotTime };
             }
         }
 

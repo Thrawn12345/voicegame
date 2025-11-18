@@ -186,6 +186,35 @@ namespace VoiceGame
             return (updatedLasers, updatedEnemies, newEnemiesDestroyed);
         }
 
+        public (List<Laser> companionBullets, List<Enemy> enemies, int enemiesDestroyed) ProcessCompanionBulletEnemyCollisions(
+            List<Laser> companionBullets, List<Enemy> enemies, int currentEnemiesDestroyed)
+        {
+            var updatedBullets = new List<Laser>(companionBullets);
+            var updatedEnemies = new List<Enemy>(enemies);
+            int newEnemiesDestroyed = currentEnemiesDestroyed;
+
+            for (int i = updatedEnemies.Count - 1; i >= 0; i--)
+            {
+                var enemy = updatedEnemies[i];
+
+                for (int j = updatedBullets.Count - 1; j >= 0; j--)
+                {
+                    var bullet = updatedBullets[j];
+
+                    if (CollisionDetector.CheckLaserEnemyCollision(bullet, enemy))
+                    {
+                        updatedEnemies.RemoveAt(i);
+                        updatedBullets.RemoveAt(j);
+                        newEnemiesDestroyed++;
+                        Console.WriteLine($"🤖🎯 Companion destroyed enemy! Total: {newEnemiesDestroyed}");
+                        break;
+                    }
+                }
+            }
+
+            return (updatedBullets, updatedEnemies, newEnemiesDestroyed);
+        }
+
         public (List<Laser> lasers, List<EnemyBullet> bullets, int bulletsDestroyed) ProcessLaserBulletCollisions(
             List<Laser> lasers, List<EnemyBullet> bullets, int currentBulletsDestroyed)
         {

@@ -81,6 +81,11 @@ namespace VoiceGame
                         RunShootingRange();
                         return;
 
+                    case "cyclic":
+                        // Run background cyclic training system
+                        RunBackgroundCyclicTraining();
+                        return;
+
                     case "models":
                         // Show current AI models
                         var modelManager = new ModelManager();
@@ -139,6 +144,59 @@ namespace VoiceGame
                 Console.WriteLine($"\n❌ Error during auto-training: {ex.Message}");
                 Console.WriteLine($"   Type: {ex.GetType().Name}");
                 Console.WriteLine($"   Stack: {ex.StackTrace}");
+            }
+        }
+
+        private static void RunBackgroundCyclicTraining()
+        {
+            Console.Clear();
+            
+            try
+            {
+                var config = new BackgroundCyclicTrainer.CyclicTrainingConfig
+                {
+                    TotalCycles = 25, // 25 complete cycles
+                    GameAIEpisodesPerCycle = 50,
+                    ShootingCyclesPerPhase = 3,
+                    DodgingCyclesPerPhase = 3,
+                    MaxTrainingTime = TimeSpan.FromHours(8) // 8 hours maximum
+                };
+
+                var trainer = new BackgroundCyclicTrainer(config);
+                
+                // Setup cancellation for Ctrl+C
+                var cts = new CancellationTokenSource();
+                Console.CancelKeyPress += (sender, e) =>
+                {
+                    e.Cancel = true;
+                    Console.WriteLine("\\n🛑 Graceful shutdown initiated...");
+                    cts.Cancel();
+                };
+
+                Console.WriteLine("Press Ctrl+C to stop training gracefully at any time.\\n");
+                
+                // Run the training
+                trainer.RunCyclicTraining(cts.Token).Wait();
+            }
+            catch (AggregateException ex)
+            {
+                if (ex.InnerException is OperationCanceledException)
+                {
+                    Console.WriteLine("\\n✅ Training stopped gracefully by user");
+                }
+                else
+                {
+                    Console.WriteLine($"\\n❌ Error during cyclic training:");
+                    Console.WriteLine($"   {ex.InnerException?.Message ?? ex.Message}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\\n❌ Error during cyclic training: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"   Inner exception: {ex.InnerException.Message}");
+                }
             }
         }
 

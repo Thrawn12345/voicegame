@@ -1,0 +1,61 @@
+{
+  "report_timestamp": "2025-11-17T18:11:08.4613671Z",
+  "session_start_time": "2025-11-17T18:11:00.7940783Z",
+  "elapsed_hours": 0.0021298024444444444,
+  "training_type": "Shooting Range - AI Training",
+  "episodes_completed": 210,
+  "total_experiences": 31500,
+  "shooting_performance": {
+    "current_accuracy": 0,
+    "average_accuracy": 0,
+    "best_accuracy": 0,
+    "total_shots_fired": 3281,
+    "total_hits": 594,
+    "accuracy_trend": "Stable"
+  },
+  "dodging_performance": {
+    "current_dodge_rate": 0,
+    "average_dodge_rate": 0,
+    "best_dodge_rate": 0,
+    "total_dodge_attempts": 150,
+    "successful_dodges": 0,
+    "dodge_trend": "Stable"
+  },
+  "ai_learning_progress": {
+    "neural_network_loss": 0.28,
+    "exploration_rate": 0.12,
+    "learning_rate": 0.0003,
+    "training_cycles_completed": 5,
+    "enemy_ai_improvement": 0,
+    "convergence_status": "Learning"
+  },
+  "companion_statistics": {
+    "active_companions": 3,
+    "companion_survival_rate": 0.85,
+    "formation_effectiveness": 0.65000004,
+    "coordination_score": 0.71,
+    "fire_support_frequency": 0.45
+  },
+  "system_performance": {
+    "episodes_per_hour": 98600.695,
+    "experiences_per_hour": 14790104,
+    "memory_usage_mb": 22,
+    "training_efficiency": 1,
+    "estimated_completion_hours": 0.018154030665755272
+  },
+  "recent_achievements": [
+    "18:11:01: Cycle 1 complete - Shooting: 0.0%, Dodging: 0.0%",
+    "18:11:02: Dodge success: 0.0%",
+    "18:11:02: Completed training cycle 1/3",
+    "18:11:04: Cycle 2 complete - Shooting: 0.0%, Dodging: 0.0%",
+    "18:11:04: Dodge success: 0.0%",
+    "18:11:05: Completed training cycle 2/3",
+    "18:11:06: Cycle 3 complete - Shooting: 0.0%, Dodging: 0.0%",
+    "18:11:07: Dodge success: 0.0%",
+    "18:11:08: Completed training cycle 3/3"
+  ],
+  "training_recommendations": [
+    "Focus on shooting range training to improve accuracy",
+    "Increase dodge training cycles to improve survival rates"
+  ]
+}

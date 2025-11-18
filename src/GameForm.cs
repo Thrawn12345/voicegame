@@ -12,11 +12,13 @@ namespace VoiceGame
         private Player player = new(PointF.Empty, PointF.Empty);
         private readonly List<Laser> lasers = new();
         private readonly List<Enemy> enemies = new();
+        private readonly List<Boss> bosses = new(); // Boss enemies
         private readonly List<EnemyBullet> enemyBullets = new();
         private readonly List<Laser> companionBullets = new(); // Companion bullets (separate from player lasers)
         private readonly List<Companion> companions = new();
         private int lives = GameConstants.InitialLives;
         private bool gameOver = false;
+        private int bossesDefeated = 0;
 
         // Game systems
         private readonly ObstacleManager obstacleManager = new();
@@ -112,7 +114,7 @@ namespace VoiceGame
             // Make sure player is positioned first, then initialize companions
             if (player.Position == PointF.Empty)
             {
-                player = new Player(new PointF(ClientSize.Width / 2, ClientSize.Height / 2), PointF.Empty);
+                player = new Player(new PointF(ClientSize.Width / 2, ClientSize.Height / 2), PointF.Empty, GameConstants.InitialLives);
             }
             
             InitializeCompanions();
@@ -133,7 +135,8 @@ namespace VoiceGame
                 Id: 1,
                 Role: CompanionRole.LeftFlank,
                 FormationTarget: PointF.Empty,
-                LastShotTime: DateTime.MinValue
+                LastShotTime: DateTime.MinValue,
+                Health: GameConstants.CompanionHealth
             ));
             
             // Companion 2: Right flank (right side support)
@@ -143,7 +146,8 @@ namespace VoiceGame
                 Id: 2,
                 Role: CompanionRole.RightFlank,
                 FormationTarget: PointF.Empty,
-                LastShotTime: DateTime.MinValue
+                LastShotTime: DateTime.MinValue,
+                Health: GameConstants.CompanionHealth
             ));
             
             // Companion 3: Rear support (rear positioning)
@@ -153,7 +157,8 @@ namespace VoiceGame
                 Id: 3,
                 Role: CompanionRole.Rear,
                 FormationTarget: PointF.Empty,
-                LastShotTime: DateTime.MinValue
+                LastShotTime: DateTime.MinValue,
+                Health: GameConstants.CompanionHealth
             ));
             
             Console.WriteLine($"🤖 Initialized {companions.Count} AI companions at screen center ({playerX}, {playerY})");
@@ -258,13 +263,15 @@ namespace VoiceGame
 
             // Clear game objects
             enemies.Clear();
+            bosses.Clear();
             lasers.Clear();
             enemyBullets.Clear();
             companionBullets.Clear();
             companions.Clear();
+            bossesDefeated = 0;
 
             // Reset player position
-            player = new Player(new PointF(Width / 2, Height / 2), PointF.Empty);
+            player = new Player(new PointF(Width / 2, Height / 2), PointF.Empty, GameConstants.InitialLives);
 
             // Regenerate obstacles
             obstacleManager.GenerateObstacles(ClientSize, player.Position);
@@ -568,15 +575,18 @@ namespace VoiceGame
 
             // Process collisions
             var laserEnemyResult = gameLogic.ProcessLaserEnemyCollisions(lasers, enemies, enemiesDestroyed);
+            
+            // Process companion bullet collisions with enemies
+            var companionBulletEnemyResult = gameLogic.ProcessCompanionBulletEnemyCollisions(companionBullets, laserEnemyResult.enemies, laserEnemyResult.enemiesDestroyed);
 
-            // Track destroyed enemies for learning
-            var destroyedCount = laserEnemyResult.enemiesDestroyed - enemiesDestroyed;
+            // Track destroyed enemies for learning (from both player and companion bullets)
+            var destroyedCount = companionBulletEnemyResult.enemiesDestroyed - enemiesDestroyed;
             if (destroyedCount > 0)
             {
                 // Find which enemies were destroyed and penalize them
                 foreach (var enemy in enemies)
                 {
-                    if (!laserEnemyResult.enemies.Any(e => e.LearningId == enemy.LearningId))
+                    if (!companionBulletEnemyResult.enemies.Any(e => e.LearningId == enemy.LearningId))
                     {
                         if (enemy.LearningId >= 0)
                         {
@@ -588,9 +598,17 @@ namespace VoiceGame
 
             lasers.Clear();
             lasers.AddRange(laserEnemyResult.lasers);
+            companionBullets.Clear();
+            companionBullets.AddRange(companionBulletEnemyResult.companionBullets);
             enemies.Clear();
-            enemies.AddRange(laserEnemyResult.enemies);
-            enemiesDestroyed = laserEnemyResult.enemiesDestroyed;
+            enemies.AddRange(companionBulletEnemyResult.enemies);
+            enemiesDestroyed = companionBulletEnemyResult.enemiesDestroyed;
+            
+            // Spawn boss every 15 enemy kills
+            if (enemiesDestroyed > 0 && enemiesDestroyed % GameConstants.BossSpawnInterval == 0 && bosses.Count == 0)
+            {
+                SpawnBoss();
+            }
 
             var laserBulletResult = gameLogic.ProcessLaserBulletCollisions(lasers, enemyBullets, bulletsDestroyed);
             lasers.Clear();
@@ -601,6 +619,9 @@ namespace VoiceGame
 
             // Check enemy-player collisions
             CheckEnemyPlayerCollisions();
+            
+            // Check boss collisions
+            CheckBossCollisions();
 
             // Check bullet-player collisions
             CheckBulletPlayerCollisions();
@@ -628,8 +649,11 @@ namespace VoiceGame
             {
                 if (CollisionDetector.CheckBulletPlayerCollision(enemyBullets[i], player))
                 {
-                    lives--;
+                    player = player with { Health = player.Health - 1 };
+                    lives = player.Health; // Keep lives in sync
                     enemyBullets.RemoveAt(i);
+                    
+                    Console.WriteLine($"💥 Player hit! Health: {player.Health}/3");
 
                     // Reward nearby enemies for successful hit
                     foreach (var enemy in enemies)
@@ -641,30 +665,61 @@ namespace VoiceGame
                         }
                     }
 
-                    if (lives <= 0)
+                    if (player.Health <= 0)
                     {
-                        EndGame();
+                        HandlePlayerDeath();
                     }
                 }
             }
         }
 
+        private void HandlePlayerDeath()
+        {
+            Console.WriteLine("💀 Player died but game continues with companions!");
+            
+            // Game continues if companions are alive
+            if (companions.Count > 0)
+            {
+                Console.WriteLine($"🤖 {companions.Count} companions still fighting!");
+                // Don't end game, let companions continue
+                return;
+            }
+            
+            // End game only if no companions left
+            EndGame();
+        }
+        
         private void EndGame()
         {
             gameOver = true;
             voiceController.Speak("Game Over!");
 
+            // Check for perfect run (no one got hit)
+            bool perfectRun = player.Health == GameConstants.InitialLives && 
+                             companions.All(c => c.Health == GameConstants.CompanionHealth);
+            
             // Enhanced final snapshot with companion performance and bullet effectiveness
             int companionsLost = 3 - companions.Count;
             int companionBulletsUsed = companionBullets.Count;
             var survivalBonus = (int)(GetCompanionSurvivalEffectiveness() * 10);
+            var perfectRunBonus = perfectRun ? (int)(enemiesDestroyed * GameConstants.PerfectRunBonusMultiplier) : 0;
             
             var finalSnapshot = new GameStateSnapshot(
                 lives, 
-                enemiesDestroyed + (companions.Count * 2) + survivalBonus, // Bonus for survival and effectiveness
+                enemiesDestroyed + (companions.Count * 2) + survivalBonus + perfectRunBonus, // Perfect run bonus
                 bulletsDestroyed + companionBulletsUsed, // Include companion bullets in training data
-                DateTime.Now
+                DateTime.Now,
+                perfectRun,
+                companions.Count,
+                companions.Count > 0, // Game continued after player death
+                bossesDefeated,
+                bosses.Count > 0 // Boss currently active
             );
+            
+            if (perfectRun)
+            {
+                Console.WriteLine($"🏆 PERFECT RUN! No hits taken. Bonus: {perfectRunBonus} points!");
+            }
             trainingCollector.EndEpisode(finalSnapshot);
             
             Console.WriteLine($"🏆 Training Episode Complete: {enemiesDestroyed} enemies, {companionsLost} companions lost, {companionBulletsUsed} companion shots");
@@ -672,6 +727,220 @@ namespace VoiceGame
             // Save enemy learning models
             enemyLearning.SaveModels();
             Console.WriteLine("🧠 Enemy learning data saved");
+        }
+        
+        private void SpawnBoss()
+        {
+            // Find valid spawn position away from player
+            var spawnPos = CollisionDetector.FindValidEnemyPosition(
+                player.Position, 
+                obstacleManager.GetObstacles(), 
+                ClientSize, 
+                random
+            );
+            
+            if (spawnPos.HasValue)
+            {
+                var boss = new Boss(
+                    Position: spawnPos.Value,
+                    Speed: GameConstants.BossSpeed,
+                    LastShotTime: DateTime.MinValue,
+                    Behavior: EnemyBehavior.BossRampage,
+                    LastBehaviorChange: DateTime.Now,
+                    Health: GameConstants.BossHealth,
+                    MaxHealth: GameConstants.BossHealth,
+                    LastSpecialAttack: DateTime.MinValue
+                );
+                
+                bosses.Add(boss);
+                Console.WriteLine($"👹 BOSS SPAWNED! Health: {GameConstants.BossHealth} (Enemy kills: {enemiesDestroyed})");
+                voiceController.Speak("Boss approaching!");
+            }
+        }
+        
+        private void CheckBossCollisions()
+        {
+            // Boss shooting
+            for (int i = 0; i < bosses.Count; i++)
+            {
+                var boss = bosses[i];
+                
+                // Boss shoots more frequently
+                if (DateTime.Now - boss.LastShotTime > TimeSpan.FromMilliseconds(GameConstants.BossShootCooldownMs))
+                {
+                    // Boss shoots at player or nearest companion
+                    var target = GetNearestTarget(boss.Position);
+                    if (target != PointF.Empty)
+                    {
+                        var direction = new PointF(target.X - boss.Position.X, target.Y - boss.Position.Y);
+                        var distance = (float)Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y);
+                        
+                        if (distance > 0)
+                        {
+                            direction = new PointF(direction.X / distance, direction.Y / distance);
+                            var bulletVelocity = new PointF(
+                                direction.X * GameConstants.EnemyBulletSpeed * 1.2f, // Boss bullets are faster
+                                direction.Y * GameConstants.EnemyBulletSpeed * 1.2f
+                            );
+                            enemyBullets.Add(new EnemyBullet(boss.Position, bulletVelocity));
+                            bosses[i] = boss with { LastShotTime = DateTime.Now };
+                        }
+                    }
+                }
+                
+                // Special attack every 3 seconds (burst fire)
+                if (DateTime.Now - boss.LastSpecialAttack > TimeSpan.FromMilliseconds(GameConstants.BossSpecialAttackCooldownMs))
+                {
+                    BossSpecialAttack(boss, i);
+                }
+            }
+            
+            // Boss-laser collisions
+            for (int i = lasers.Count - 1; i >= 0; i--)
+            {
+                for (int j = bosses.Count - 1; j >= 0; j--)
+                {
+                    if (CollisionDetector.CheckLaserBossCollision(lasers[i], bosses[j]))
+                    {
+                        var boss = bosses[j];
+                        var damagedBoss = boss with { Health = boss.Health - 1 };
+                        
+                        lasers.RemoveAt(i);
+                        Console.WriteLine($"💥 Boss hit! Health: {damagedBoss.Health}/{boss.MaxHealth}");
+                        
+                        if (damagedBoss.Health <= 0)
+                        {
+                            bosses.RemoveAt(j);
+                            bossesDefeated++;
+                            Console.WriteLine($"💀 BOSS DEFEATED! Total bosses defeated: {bossesDefeated}");
+                            voiceController.Speak("Boss defeated!");
+                        }
+                        else
+                        {
+                            bosses[j] = damagedBoss;
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            // Boss-companion bullet collisions
+            for (int i = companionBullets.Count - 1; i >= 0; i--)
+            {
+                for (int j = bosses.Count - 1; j >= 0; j--)
+                {
+                    if (CollisionDetector.CheckLaserBossCollision(companionBullets[i], bosses[j]))
+                    {
+                        var boss = bosses[j];
+                        var damagedBoss = boss with { Health = boss.Health - 1 };
+                        
+                        companionBullets.RemoveAt(i);
+                        Console.WriteLine($"🤖💥 Companion hit boss! Health: {damagedBoss.Health}/{boss.MaxHealth}");
+                        
+                        if (damagedBoss.Health <= 0)
+                        {
+                            bosses.RemoveAt(j);
+                            bossesDefeated++;
+                            Console.WriteLine($"🤖💀 COMPANION DEFEATED BOSS! Total bosses defeated: {bossesDefeated}");
+                            voiceController.Speak("Companion defeated boss!");
+                        }
+                        else
+                        {
+                            bosses[j] = damagedBoss;
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            // Boss-player collisions
+            for (int i = bosses.Count - 1; i >= 0; i--)
+            {
+                if (CollisionDetector.CheckPlayerBossCollision(player, bosses[i]))
+                {
+                    player = player with { Health = player.Health - 2 }; // Boss does double damage
+                    lives = player.Health;
+                    Console.WriteLine($"💥💥 Boss collision! Player took 2 damage! Health: {player.Health}/3");
+                    
+                    if (player.Health <= 0)
+                    {
+                        HandlePlayerDeath();
+                    }
+                }
+            }
+            
+            // Boss-companion collisions
+            for (int i = companions.Count - 1; i >= 0; i--)
+            {
+                for (int j = 0; j < bosses.Count; j++)
+                {
+                    if (CollisionDetector.CheckCompanionBossCollision(companions[i], bosses[j]))
+                    {
+                        var companion = companions[i];
+                        var damagedCompanion = companion with { Health = companion.Health - 2 }; // Boss does double damage
+                        
+                        Console.WriteLine($"💥💥 Companion {companion.Id} hit by boss! Health: {damagedCompanion.Health}/3");
+                        
+                        if (damagedCompanion.Health <= 0)
+                        {
+                            companions.RemoveAt(i);
+                            Console.WriteLine($"💀 Companion {companion.Id} destroyed by boss!");
+                        }
+                        else
+                        {
+                            companions[i] = damagedCompanion;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        
+        private void BossSpecialAttack(Boss boss, int bossIndex)
+        {
+            // Burst fire - shoot 3 bullets in different directions
+            var targets = new List<PointF> { player.Position };
+            targets.AddRange(companions.Select(c => c.Position));
+            
+            foreach (var target in targets.Take(3)) // Limit to 3 targets
+            {
+                var direction = new PointF(target.X - boss.Position.X, target.Y - boss.Position.Y);
+                var distance = (float)Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y);
+                
+                if (distance > 0)
+                {
+                    direction = new PointF(direction.X / distance, direction.Y / distance);
+                    var bulletVelocity = new PointF(
+                        direction.X * GameConstants.EnemyBulletSpeed * 1.5f, // Special attack bullets are even faster
+                        direction.Y * GameConstants.EnemyBulletSpeed * 1.5f
+                    );
+                    enemyBullets.Add(new EnemyBullet(boss.Position, bulletVelocity));
+                }
+            }
+            
+            bosses[bossIndex] = boss with { LastSpecialAttack = DateTime.Now };
+            Console.WriteLine("👹 Boss special attack - burst fire!");
+        }
+        
+        private PointF GetNearestTarget(PointF bossPosition)
+        {
+            var targets = new List<PointF> { player.Position };
+            targets.AddRange(companions.Select(c => c.Position));
+            
+            PointF nearestTarget = PointF.Empty;
+            float nearestDistance = float.MaxValue;
+            
+            foreach (var target in targets)
+            {
+                float distance = CollisionDetector.Distance(bossPosition, target);
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearestTarget = target;
+                }
+            }
+            
+            return nearestTarget;
         }
 
         private void AIShootingTimer_Tick(object? sender, EventArgs e)
@@ -735,9 +1004,9 @@ namespace VoiceGame
 
         private bool ShouldCompanionShoot(Companion companion)
         {
-            // Check cooldown period - more frequent shooting
+            // Check cooldown period - same rate as player
             var timeSinceLastShot = DateTime.UtcNow - companion.LastShotTime;
-            var cooldownPeriod = TimeSpan.FromMilliseconds(200); // Faster shooting for more action
+            var cooldownPeriod = TimeSpan.FromMilliseconds(GameConstants.CompanionShootCooldownMs);
             
             if (timeSinceLastShot < cooldownPeriod) return false;
             
@@ -796,43 +1065,48 @@ namespace VoiceGame
 
         private void HandleCompanionCollisions()
         {
-            var companionsToRemove = new List<Companion>();
-
-            foreach (var companion in companions)
+            for (int i = companions.Count - 1; i >= 0; i--)
             {
+                var companion = companions[i];
+                bool hitTaken = false;
+
                 // Check collision with enemies
                 foreach (var enemy in enemies)
                 {
-                    float distance = CollisionDetector.Distance(companion.Position, enemy.Position);
-                    if (distance <= GameConstants.PlayerRadius + GameConstants.EnemyRadius)
+                    if (CollisionDetector.CheckCompanionEnemyCollision(companion, enemy))
                     {
-                        companionsToRemove.Add(companion);
-                        Console.WriteLine($"💀 Companion {companion.Id} ({companion.Role}) destroyed by enemy contact!");
+                        var damagedCompanion = companion with { Health = companion.Health - 1 };
+                        companions[i] = damagedCompanion;
+                        hitTaken = true;
+                        Console.WriteLine($"💥 Companion {companion.Id} ({companion.Role}) hit by enemy! Health: {damagedCompanion.Health}/3");
                         break;
                     }
                 }
 
                 // Check collision with enemy bullets
-                if (!companionsToRemove.Contains(companion))
+                if (!hitTaken)
                 {
-                    foreach (var bullet in enemyBullets.ToList())
+                    for (int j = enemyBullets.Count - 1; j >= 0; j--)
                     {
-                        float distance = CollisionDetector.Distance(companion.Position, bullet.Position);
-                        if (distance <= GameConstants.PlayerRadius + 3f) // Bullet radius is ~3
+                        var bullet = enemyBullets[j];
+                        if (CollisionDetector.CheckBulletCompanionCollision(bullet, companion))
                         {
-                            companionsToRemove.Add(companion);
-                            enemyBullets.Remove(bullet);
-                            Console.WriteLine($"💀 Companion {companion.Id} ({companion.Role}) destroyed by enemy bullet!");
+                            var damagedCompanion = companion with { Health = companion.Health - 1 };
+                            companions[i] = damagedCompanion;
+                            enemyBullets.RemoveAt(j);
+                            hitTaken = true;
+                            Console.WriteLine($"💥 Companion {companion.Id} ({companion.Role}) hit by bullet! Health: {damagedCompanion.Health}/3");
                             break;
                         }
                     }
                 }
-            }
 
-            // Remove destroyed companions
-            foreach (var companion in companionsToRemove)
-            {
-                companions.Remove(companion);
+                // Remove companion if health reaches 0
+                if (companions[i].Health <= 0)
+                {
+                    Console.WriteLine($"💀 Companion {companion.Id} ({companion.Role}) destroyed!");
+                    companions.RemoveAt(i);
+                }
             }
         }
 
@@ -880,10 +1154,25 @@ namespace VoiceGame
                 
                 bool isSafelyPositioned = minEnemyDistance > 50f;
                 
-                // Calculate effectiveness score
+                // Penalize edge positioning (being too close to screen edges)
+                float edgeDistance = Math.Min(
+                    Math.Min(companion.Position.X, ClientSize.Width - companion.Position.X),
+                    Math.Min(companion.Position.Y, ClientSize.Height - companion.Position.Y)
+                );
+                bool isNearEdge = edgeDistance < 60f;
+                
+                // Penalize stationary behavior (low velocity)
+                float velocity = (float)Math.Sqrt(companion.Velocity.X * companion.Velocity.X + companion.Velocity.Y * companion.Velocity.Y);
+                bool isStationary = velocity < 1f;
+                
+                // Calculate effectiveness score with penalties
                 float companionScore = 0.2f; // Base survival bonus
                 if (isActivelyShooting) companionScore += 0.15f;
                 if (isSafelyPositioned) companionScore += 0.1f;
+                
+                // Apply penalties
+                if (isNearEdge) companionScore *= GameConstants.EdgePenaltyMultiplier;
+                if (isStationary) companionScore *= GameConstants.StationaryPenaltyMultiplier;
                 
                 effectiveness += companionScore;
             }
@@ -1039,6 +1328,51 @@ namespace VoiceGame
                     enemy.Position.Y - GameConstants.EnemyRadius,
                     GameConstants.EnemyRadius * 2,
                     GameConstants.EnemyRadius * 2);
+            }
+            
+            // Draw bosses (larger and different color)
+            foreach (var boss in bosses)
+            {
+                // Boss health indicator - color changes based on health
+                Brush bossBrush = boss.Health switch
+                {
+                    >= 4 => Brushes.DarkRed,    // Full health
+                    3 => Brushes.Red,           // 3/4 health
+                    2 => Brushes.Orange,        // Half health
+                    1 => Brushes.Yellow,        // Low health
+                    _ => Brushes.Gray           // Should not happen
+                };
+                
+                // Draw boss (larger than regular enemies)
+                g.FillEllipse(bossBrush,
+                    boss.Position.X - GameConstants.BossRadius,
+                    boss.Position.Y - GameConstants.BossRadius,
+                    GameConstants.BossRadius * 2,
+                    GameConstants.BossRadius * 2);
+                
+                // Draw boss border
+                g.DrawEllipse(Pens.White,
+                    boss.Position.X - GameConstants.BossRadius,
+                    boss.Position.Y - GameConstants.BossRadius,
+                    GameConstants.BossRadius * 2,
+                    GameConstants.BossRadius * 2);
+                
+                // Draw health bar above boss
+                var healthBarWidth = 40f;
+                var healthBarHeight = 6f;
+                var healthPercentage = (float)boss.Health / boss.MaxHealth;
+                
+                g.FillRectangle(Brushes.Red,
+                    boss.Position.X - healthBarWidth / 2,
+                    boss.Position.Y - GameConstants.BossRadius - 15,
+                    healthBarWidth,
+                    healthBarHeight);
+                    
+                g.FillRectangle(Brushes.Green,
+                    boss.Position.X - healthBarWidth / 2,
+                    boss.Position.Y - GameConstants.BossRadius - 15,
+                    healthBarWidth * healthPercentage,
+                    healthBarHeight);
             }
 
             // Draw enemy bullets

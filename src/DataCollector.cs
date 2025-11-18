@@ -271,5 +271,71 @@ namespace VoiceGame
                 _ => 8  // Default to stop
             };
         }
+
+        /// <summary>
+        /// Get shooting training data for AI training
+        /// </summary>
+        public List<ShootingTrainingData> GetShootingTrainingData()
+        {
+            var shootingData = new List<ShootingTrainingData>();
+            
+            try
+            {
+                // Convert episodes to shooting training data
+                foreach (var experience in currentEpisode)
+                {
+                    if (experience.State != null && experience.State.Length >= 20)
+                    {
+                        var data = new ShootingTrainingData
+                        {
+                            PlayerX = experience.State[0] * 800,
+                            PlayerY = experience.State[1] * 600,
+                            EnemyX = experience.State.Length > 4 ? experience.State[4] * 800 : 0,
+                            EnemyY = experience.State.Length > 5 ? experience.State[5] * 600 : 0,
+                            EnemyDistance = experience.State.Length > 6 ? experience.State[6] * 1000 : 1000,
+                            EnemyVelocityX = experience.State.Length > 7 ? experience.State[7] * 10 : 0,
+                            EnemyVelocityY = experience.State.Length > 8 ? experience.State[8] * 10 : 0,
+                            PlayerHealth = experience.State.Length > 15 ? experience.State[15] * 100 : 100,
+                            AmmoCount = experience.State.Length > 16 ? experience.State[16] * 30 : 30,
+                            DidShoot = experience.Action >= 9, // Shooting actions are 9+
+                            ShotDirection = new PointF(
+                                experience.State.Length > 17 ? experience.State[17] * 800 : 0,
+                                experience.State.Length > 18 ? experience.State[18] * 600 : 0
+                            ),
+                            WasHit = experience.Reward > 0,
+                            Timestamp = DateTime.FromBinary(experience.Timestamp)
+                        };
+                        
+                        shootingData.Add(data);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error extracting shooting training data: {ex.Message}");
+            }
+            
+            return shootingData;
+        }
+    }
+
+    /// <summary>
+    /// Training data for shooting AI
+    /// </summary>
+    public class ShootingTrainingData
+    {
+        public double PlayerX { get; set; }
+        public double PlayerY { get; set; }
+        public double EnemyX { get; set; }
+        public double EnemyY { get; set; }
+        public double EnemyDistance { get; set; }
+        public double EnemyVelocityX { get; set; }
+        public double EnemyVelocityY { get; set; }
+        public double PlayerHealth { get; set; }
+        public double AmmoCount { get; set; }
+        public bool DidShoot { get; set; }
+        public PointF ShotDirection { get; set; }
+        public bool WasHit { get; set; }
+        public DateTime Timestamp { get; set; }
     }
 }
