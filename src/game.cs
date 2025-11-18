@@ -642,6 +642,10 @@ namespace VoiceGame
 
         private void CheckEnemyPlayerCollisions()
         {
+            // Skip collision check if player is dead
+            if (player.Health <= 0)
+                return;
+
             for (int i = enemies.Count - 1; i >= 0; i--)
             {
                 if (CollisionDetector.CheckPlayerEnemyCollision(player, enemies[i]))
@@ -656,6 +660,10 @@ namespace VoiceGame
 
         private void CheckBulletPlayerCollisions()
         {
+            // Skip collision check if player is dead
+            if (player.Health <= 0)
+                return;
+
             for (int i = enemyBullets.Count - 1; i >= 0; i--)
             {
                 if (CollisionDetector.CheckBulletPlayerCollision(enemyBullets[i], player))
@@ -864,18 +872,21 @@ namespace VoiceGame
                 }
             }
             
-            // Boss-player collisions
-            for (int i = bosses.Count - 1; i >= 0; i--)
+            // Boss-player collisions - skip if player is dead
+            if (player.Health > 0)
             {
-                if (CollisionDetector.CheckPlayerBossCollision(player, bosses[i]))
+                for (int i = bosses.Count - 1; i >= 0; i--)
                 {
-                    player = player with { Health = player.Health - 2 }; // Boss does double damage
-                    lives = player.Health;
-                    Console.WriteLine($"💥💥 Boss collision! Player took 2 damage! Health: {player.Health}/3");
-                    
-                    if (player.Health <= 0)
+                    if (CollisionDetector.CheckPlayerBossCollision(player, bosses[i]))
                     {
-                        HandlePlayerDeath();
+                        player = player with { Health = player.Health - 2 }; // Boss does double damage
+                        lives = player.Health;
+                        Console.WriteLine($"💥💥 Boss collision! Player took 2 damage! Health: {player.Health}/3");
+                        
+                        if (player.Health <= 0)
+                        {
+                            HandlePlayerDeath();
+                        }
                     }
                 }
             }
