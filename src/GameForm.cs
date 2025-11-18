@@ -339,6 +339,9 @@ namespace VoiceGame
         {
             if (gameOver) return;
 
+            // Stop player movement and control if dead (but companions still alive)
+            bool playerAlive = player.Health > 0;
+
             // Clear movement if switching from AI to manual mid-game
             if (!aiMode && !player.IsMovingToTarget)
             {
@@ -346,8 +349,8 @@ namespace VoiceGame
                 // This prevents residual AI movement
             }
 
-            // AI Mode: Let AI control player movement (highest priority)
-            if (aiMode && aiPlayer != null)
+            // AI Mode: Let AI control player movement (highest priority) - only if player is alive
+            if (aiMode && aiPlayer != null && playerAlive)
             {
                 var aiVelocity = aiPlayer.GetRecommendedVelocity(
                     player.Position, player.Velocity,
@@ -364,8 +367,8 @@ namespace VoiceGame
                 );
                 player = player with { Velocity = aiVelocity, TargetPosition = null, IsMovingToTarget = false };
             }
-            // Manual Mode: Handle target-based movement and position holding
-            else if (!aiMode && player.TargetPosition.HasValue)
+            // Manual Mode: Handle target-based movement and position holding - only if player is alive
+            else if (!aiMode && player.TargetPosition.HasValue && playerAlive)
             {
                 // If not actively moving to target, maintain position near target with small patrol movements
                 if (!player.IsMovingToTarget)
@@ -443,8 +446,16 @@ namespace VoiceGame
                 // No additional processing needed here
             }
 
-            // Update game objects using GameLogic
-            player = gameLogic.UpdatePlayerPosition(player, ClientSize);
+            // Update game objects using GameLogic - only update player position if alive
+            if (playerAlive)
+            {
+                player = gameLogic.UpdatePlayerPosition(player, ClientSize);
+            }
+            else
+            {
+                // Dead player stays in place with zero velocity
+                player = player with { Velocity = PointF.Empty };
+            }
 
             // Update companions with formation AI
             var updatedCompanions = formationAI.UpdateCompanions(
@@ -947,17 +958,23 @@ namespace VoiceGame
         {
             if (gameOver) return;
 
-            // Player AI shooting (with companion-aware state including bullets)
-            var enhancedState = GetEnhancedStateForTraining();
-            var allBullets = enemyBullets.Concat(companionBullets.Select(cb => new EnemyBullet(cb.Position, cb.Velocity))).ToList();
-            var state = aiAgent.GetStateVector(player, enemies, allBullets, ClientSize);
-            var action = aiAgent.ChooseAction(state);
-            var laserVelocity = aiAgent.ExecuteAction(action, player, enemies);
+            // Only allow player to shoot if alive
+            bool playerAlive = player.Health > 0;
 
-            if (laserVelocity.HasValue)
+            // Player AI shooting (with companion-aware state including bullets) - only if player is alive
+            if (playerAlive)
             {
-                lasers.Add(new Laser(player.Position, laserVelocity.Value));
-                Console.WriteLine($"🎯 AI Action: {action}");
+                var enhancedState = GetEnhancedStateForTraining();
+                var allBullets = enemyBullets.Concat(companionBullets.Select(cb => new EnemyBullet(cb.Position, cb.Velocity))).ToList();
+                var state = aiAgent.GetStateVector(player, enemies, allBullets, ClientSize);
+                var action = aiAgent.ChooseAction(state);
+                var laserVelocity = aiAgent.ExecuteAction(action, player, enemies);
+
+                if (laserVelocity.HasValue)
+                {
+                    lasers.Add(new Laser(player.Position, laserVelocity.Value));
+                    Console.WriteLine($"🎯 AI Action: {action}");
+                }
             }
 
             // Companion AI shooting
@@ -1278,30 +1295,33 @@ namespace VoiceGame
             // Draw obstacles first (background)
             obstacleManager.DrawObstacles(g);
 
-            // Draw player
-            g.FillEllipse(Brushes.Cyan,
-                player.Position.X - GameConstants.PlayerRadius,
-                player.Position.Y - GameConstants.PlayerRadius,
-                GameConstants.PlayerRadius * 2,
-                GameConstants.PlayerRadius * 2);
-
-            // Draw target position if set
-            if (player.IsMovingToTarget && player.TargetPosition.HasValue)
+            // Draw player only if alive
+            if (player.Health > 0)
             {
-                var target = player.TargetPosition.Value;
-                
-                // Draw target crosshair
-                using var targetPen = new Pen(Color.LimeGreen, 3);
-                float crossSize = 10f;
-                g.DrawLine(targetPen, target.X - crossSize, target.Y, target.X + crossSize, target.Y);
-                g.DrawLine(targetPen, target.X, target.Y - crossSize, target.X, target.Y + crossSize);
-                
-                // Draw circle around target
-                g.DrawEllipse(targetPen, target.X - 15, target.Y - 15, 30, 30);
-                
-                // Draw path line from player to target
-                using var pathPen = new Pen(Color.LimeGreen, 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash };
-                g.DrawLine(pathPen, player.Position, target);
+                g.FillEllipse(Brushes.Cyan,
+                    player.Position.X - GameConstants.PlayerRadius,
+                    player.Position.Y - GameConstants.PlayerRadius,
+                    GameConstants.PlayerRadius * 2,
+                    GameConstants.PlayerRadius * 2);
+
+                // Draw target position if set
+                if (player.IsMovingToTarget && player.TargetPosition.HasValue)
+                {
+                    var target = player.TargetPosition.Value;
+                    
+                    // Draw target crosshair
+                    using var targetPen = new Pen(Color.LimeGreen, 3);
+                    float crossSize = 10f;
+                    g.DrawLine(targetPen, target.X - crossSize, target.Y, target.X + crossSize, target.Y);
+                    g.DrawLine(targetPen, target.X, target.Y - crossSize, target.X, target.Y + crossSize);
+                    
+                    // Draw circle around target
+                    g.DrawEllipse(targetPen, target.X - 15, target.Y - 15, 30, 30);
+                    
+                    // Draw path line from player to target
+                    using var pathPen = new Pen(Color.LimeGreen, 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash };
+                    g.DrawLine(pathPen, player.Position, target);
+                }
             }
 
             // Draw player lasers
