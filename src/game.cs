@@ -56,12 +56,12 @@ namespace VoiceGame
         private void InitializeForm()
         {
             Text = "Voice Controlled Game with AI Shooting";
-            
+
             // Make the game fullscreen
             WindowState = FormWindowState.Maximized;
             FormBorderStyle = FormBorderStyle.None;
             TopMost = true;
-            
+
             DoubleBuffered = true;
             BackColor = Color.Black;
             KeyPreview = true;
@@ -110,24 +110,24 @@ namespace VoiceGame
         private void StartGame()
         {
             trainingCollector.StartEpisode();
-            
+
             // Make sure player is positioned first, then initialize companions
             if (player.Position == PointF.Empty)
             {
                 player = new Player(new PointF(ClientSize.Width / 2, ClientSize.Height / 2), PointF.Empty, GameConstants.InitialLives);
             }
-            
+
             InitializeCompanions();
         }
 
         private void InitializeCompanions()
         {
             companions.Clear();
-            
+
             // Create 3 companions with different roles
             float playerX = ClientSize.Width / 2f;
             float playerY = ClientSize.Height / 2f;
-            
+
             // Companion 1: Left flank (left side support)
             companions.Add(new Companion(
                 Position: new PointF(playerX - 80, playerY - 40),
@@ -138,7 +138,7 @@ namespace VoiceGame
                 LastShotTime: DateTime.MinValue,
                 Health: GameConstants.CompanionHealth
             ));
-            
+
             // Companion 2: Right flank (right side support)
             companions.Add(new Companion(
                 Position: new PointF(playerX + 80, playerY - 40),
@@ -149,7 +149,7 @@ namespace VoiceGame
                 LastShotTime: DateTime.MinValue,
                 Health: GameConstants.CompanionHealth
             ));
-            
+
             // Companion 3: Rear support (rear positioning)
             companions.Add(new Companion(
                 Position: new PointF(playerX, playerY - 100),
@@ -160,9 +160,9 @@ namespace VoiceGame
                 LastShotTime: DateTime.MinValue,
                 Health: GameConstants.CompanionHealth
             ));
-            
+
             Console.WriteLine($"🤖 Initialized {companions.Count} AI companions at screen center ({playerX}, {playerY})");
-            
+
             // Debug: Print companion positions
             foreach (var companion in companions)
             {
@@ -295,7 +295,7 @@ namespace VoiceGame
                 // Try to load the best player model from models folder
                 var modelManager = new ModelManager();
                 string bestModelPath = modelManager.GetBestModelPath("player_ai");
-                
+
                 if (string.IsNullOrEmpty(bestModelPath))
                 {
                     // Fallback to old location for backward compatibility
@@ -309,14 +309,15 @@ namespace VoiceGame
 
                 aiPlayer = new AIPlayer(bestModelPath, explorationRate: 0.1f);
             }
-            
+
             aiMode = !aiMode;
 
             // Reset player state when switching modes
-            player = player with { 
-                Velocity = PointF.Empty, 
-                TargetPosition = null, 
-                IsMovingToTarget = false 
+            player = player with
+            {
+                Velocity = PointF.Empty,
+                TargetPosition = null,
+                IsMovingToTarget = false
             };
 
             if (aiMode)
@@ -375,15 +376,15 @@ namespace VoiceGame
                 {
                     var holdPosition = player.TargetPosition.Value;
                     var distanceFromHoldPosition = Math.Sqrt(
-                        Math.Pow(holdPosition.X - player.Position.X, 2) + 
+                        Math.Pow(holdPosition.X - player.Position.X, 2) +
                         Math.Pow(holdPosition.Y - player.Position.Y, 2)
                     );
-                    
+
                     // If drifted too far from hold position, gently move back
                     if (distanceFromHoldPosition > 25f)
                     {
                         var returnDirection = pathfinding.GetOptimalVelocity(
-                            player.Position, 
+                            player.Position,
                             holdPosition,
                             enemies,
                             enemyBullets,
@@ -431,9 +432,10 @@ namespace VoiceGame
                 {
                     // Close enough to target, slow down but maintain position near target
                     var holdPosition = player.TargetPosition.Value;
-                    player = player with { 
-                        TargetPosition = holdPosition, 
-                        IsMovingToTarget = false, 
+                    player = player with
+                    {
+                        TargetPosition = holdPosition,
+                        IsMovingToTarget = false,
                         Velocity = new PointF(optimalVelocity.X * 0.1f, optimalVelocity.Y * 0.1f) // Slow movement to maintain position
                     };
                     Console.WriteLine("🎯 Target reached! Holding position.");
@@ -469,7 +471,7 @@ namespace VoiceGame
             );
             companions.Clear();
             companions.AddRange(updatedCompanions);
-            
+
             Console.WriteLine($"🤖 Updated {companions.Count} companions with formation AI");
 
             // Handle companion collisions with enemies and bullets
@@ -586,7 +588,7 @@ namespace VoiceGame
 
             // Process collisions
             var laserEnemyResult = gameLogic.ProcessLaserEnemyCollisions(lasers, enemies, enemiesDestroyed);
-            
+
             // Process companion bullet collisions with enemies
             var companionBulletEnemyResult = gameLogic.ProcessCompanionBulletEnemyCollisions(companionBullets, laserEnemyResult.enemies, laserEnemyResult.enemiesDestroyed);
 
@@ -614,7 +616,7 @@ namespace VoiceGame
             enemies.Clear();
             enemies.AddRange(companionBulletEnemyResult.enemies);
             enemiesDestroyed = companionBulletEnemyResult.enemiesDestroyed;
-            
+
             // Spawn boss every 15 enemy kills
             if (enemiesDestroyed > 0 && enemiesDestroyed % GameConstants.BossSpawnInterval == 0 && bosses.Count == 0)
             {
@@ -630,7 +632,7 @@ namespace VoiceGame
 
             // Check enemy-player collisions
             CheckEnemyPlayerCollisions();
-            
+
             // Check boss collisions
             CheckBossCollisions();
 
@@ -671,7 +673,7 @@ namespace VoiceGame
                     player = player with { Health = player.Health - 1 };
                     lives = player.Health; // Keep lives in sync
                     enemyBullets.RemoveAt(i);
-                    
+
                     Console.WriteLine($"💥 Player hit! Health: {player.Health}/3");
 
                     // Reward nearby enemies for successful hit
@@ -695,7 +697,7 @@ namespace VoiceGame
         private void HandlePlayerDeath()
         {
             Console.WriteLine("💀 Player died but game continues with companions!");
-            
+
             // Game continues if companions are alive
             if (companions.Count > 0)
             {
@@ -703,28 +705,28 @@ namespace VoiceGame
                 // Don't end game, let companions continue
                 return;
             }
-            
+
             // End game only if no companions left
             EndGame();
         }
-        
+
         private void EndGame()
         {
             gameOver = true;
             voiceController.Speak("Game Over!");
 
             // Check for perfect run (no one got hit)
-            bool perfectRun = player.Health == GameConstants.InitialLives && 
+            bool perfectRun = player.Health == GameConstants.InitialLives &&
                              companions.All(c => c.Health == GameConstants.CompanionHealth);
-            
+
             // Enhanced final snapshot with companion performance and bullet effectiveness
             int companionsLost = 3 - companions.Count;
             int companionBulletsUsed = companionBullets.Count;
             var survivalBonus = (int)(GetCompanionSurvivalEffectiveness() * 10);
             var perfectRunBonus = perfectRun ? (int)(enemiesDestroyed * GameConstants.PerfectRunBonusMultiplier) : 0;
-            
+
             var finalSnapshot = new GameStateSnapshot(
-                lives, 
+                lives,
                 enemiesDestroyed + (companions.Count * 2) + survivalBonus + perfectRunBonus, // Perfect run bonus
                 bulletsDestroyed + companionBulletsUsed, // Include companion bullets in training data
                 DateTime.Now,
@@ -734,30 +736,30 @@ namespace VoiceGame
                 bossesDefeated,
                 bosses.Count > 0 // Boss currently active
             );
-            
+
             if (perfectRun)
             {
                 Console.WriteLine($"🏆 PERFECT RUN! No hits taken. Bonus: {perfectRunBonus} points!");
             }
             trainingCollector.EndEpisode(finalSnapshot);
-            
+
             Console.WriteLine($"🏆 Training Episode Complete: {enemiesDestroyed} enemies, {companionsLost} companions lost, {companionBulletsUsed} companion shots");
 
             // Save enemy learning models
             enemyLearning.SaveModels();
             Console.WriteLine("🧠 Enemy learning data saved");
         }
-        
+
         private void SpawnBoss()
         {
             // Find valid spawn position away from player
             var spawnPos = CollisionDetector.FindValidEnemyPosition(
-                player.Position, 
-                obstacleManager.GetObstacles(), 
-                ClientSize, 
+                player.Position,
+                obstacleManager.GetObstacles(),
+                ClientSize,
                 random
             );
-            
+
             if (spawnPos.HasValue)
             {
                 var boss = new Boss(
@@ -770,20 +772,20 @@ namespace VoiceGame
                     MaxHealth: GameConstants.BossHealth,
                     LastSpecialAttack: DateTime.MinValue
                 );
-                
+
                 bosses.Add(boss);
                 Console.WriteLine($"👹 BOSS SPAWNED! Health: {GameConstants.BossHealth} (Enemy kills: {enemiesDestroyed})");
                 voiceController.Speak("Boss approaching!");
             }
         }
-        
+
         private void CheckBossCollisions()
         {
             // Boss shooting
             for (int i = 0; i < bosses.Count; i++)
             {
                 var boss = bosses[i];
-                
+
                 // Boss shoots more frequently
                 if (DateTime.Now - boss.LastShotTime > TimeSpan.FromMilliseconds(GameConstants.BossShootCooldownMs))
                 {
@@ -793,7 +795,7 @@ namespace VoiceGame
                     {
                         var direction = new PointF(target.X - boss.Position.X, target.Y - boss.Position.Y);
                         var distance = (float)Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y);
-                        
+
                         if (distance > 0)
                         {
                             direction = new PointF(direction.X / distance, direction.Y / distance);
@@ -806,14 +808,14 @@ namespace VoiceGame
                         }
                     }
                 }
-                
+
                 // Special attack every 3 seconds (burst fire)
                 if (DateTime.Now - boss.LastSpecialAttack > TimeSpan.FromMilliseconds(GameConstants.BossSpecialAttackCooldownMs))
                 {
                     BossSpecialAttack(boss, i);
                 }
             }
-            
+
             // Boss-laser collisions
             for (int i = lasers.Count - 1; i >= 0; i--)
             {
@@ -823,10 +825,10 @@ namespace VoiceGame
                     {
                         var boss = bosses[j];
                         var damagedBoss = boss with { Health = boss.Health - 1 };
-                        
+
                         lasers.RemoveAt(i);
                         Console.WriteLine($"💥 Boss hit! Health: {damagedBoss.Health}/{boss.MaxHealth}");
-                        
+
                         if (damagedBoss.Health <= 0)
                         {
                             bosses.RemoveAt(j);
@@ -842,7 +844,7 @@ namespace VoiceGame
                     }
                 }
             }
-            
+
             // Boss-companion bullet collisions
             for (int i = companionBullets.Count - 1; i >= 0; i--)
             {
@@ -852,10 +854,10 @@ namespace VoiceGame
                     {
                         var boss = bosses[j];
                         var damagedBoss = boss with { Health = boss.Health - 1 };
-                        
+
                         companionBullets.RemoveAt(i);
                         Console.WriteLine($"🤖💥 Companion hit boss! Health: {damagedBoss.Health}/{boss.MaxHealth}");
-                        
+
                         if (damagedBoss.Health <= 0)
                         {
                             bosses.RemoveAt(j);
@@ -871,7 +873,7 @@ namespace VoiceGame
                     }
                 }
             }
-            
+
             // Boss-player collisions - skip if player is dead
             if (player.Health > 0)
             {
@@ -882,7 +884,7 @@ namespace VoiceGame
                         player = player with { Health = player.Health - 2 }; // Boss does double damage
                         lives = player.Health;
                         Console.WriteLine($"💥💥 Boss collision! Player took 2 damage! Health: {player.Health}/3");
-                        
+
                         if (player.Health <= 0)
                         {
                             HandlePlayerDeath();
@@ -890,7 +892,7 @@ namespace VoiceGame
                     }
                 }
             }
-            
+
             // Boss-companion collisions
             for (int i = companions.Count - 1; i >= 0; i--)
             {
@@ -900,9 +902,9 @@ namespace VoiceGame
                     {
                         var companion = companions[i];
                         var damagedCompanion = companion with { Health = companion.Health - 2 }; // Boss does double damage
-                        
+
                         Console.WriteLine($"💥💥 Companion {companion.Id} hit by boss! Health: {damagedCompanion.Health}/3");
-                        
+
                         if (damagedCompanion.Health <= 0)
                         {
                             companions.RemoveAt(i);
@@ -917,18 +919,18 @@ namespace VoiceGame
                 }
             }
         }
-        
+
         private void BossSpecialAttack(Boss boss, int bossIndex)
         {
             // Burst fire - shoot 3 bullets in different directions
             var targets = new List<PointF> { player.Position };
             targets.AddRange(companions.Select(c => c.Position));
-            
+
             foreach (var target in targets.Take(3)) // Limit to 3 targets
             {
                 var direction = new PointF(target.X - boss.Position.X, target.Y - boss.Position.Y);
                 var distance = (float)Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y);
-                
+
                 if (distance > 0)
                 {
                     direction = new PointF(direction.X / distance, direction.Y / distance);
@@ -939,19 +941,19 @@ namespace VoiceGame
                     enemyBullets.Add(new EnemyBullet(boss.Position, bulletVelocity));
                 }
             }
-            
+
             bosses[bossIndex] = boss with { LastSpecialAttack = DateTime.Now };
             Console.WriteLine("👹 Boss special attack - burst fire!");
         }
-        
+
         private PointF GetNearestTarget(PointF bossPosition)
         {
             var targets = new List<PointF> { player.Position };
             targets.AddRange(companions.Select(c => c.Position));
-            
+
             PointF nearestTarget = PointF.Empty;
             float nearestDistance = float.MaxValue;
-            
+
             foreach (var target in targets)
             {
                 float distance = CollisionDetector.Distance(bossPosition, target);
@@ -961,7 +963,7 @@ namespace VoiceGame
                     nearestTarget = target;
                 }
             }
-            
+
             return nearestTarget;
         }
 
@@ -1035,23 +1037,23 @@ namespace VoiceGame
             // Check cooldown period - same rate as player
             var timeSinceLastShot = DateTime.UtcNow - companion.LastShotTime;
             var cooldownPeriod = TimeSpan.FromMilliseconds(GameConstants.CompanionShootCooldownMs);
-            
+
             if (timeSinceLastShot < cooldownPeriod) return false;
-            
+
             // Higher chance to shoot if enemies are present
             if (enemies.Count > 0)
             {
                 // Find closest enemy within shooting range
-                var closestEnemyDistance = enemies.Min(e => 
-                    Math.Sqrt(Math.Pow(e.Position.X - companion.Position.X, 2) + 
+                var closestEnemyDistance = enemies.Min(e =>
+                    Math.Sqrt(Math.Pow(e.Position.X - companion.Position.X, 2) +
                              Math.Pow(e.Position.Y - companion.Position.Y, 2)));
-                
+
                 // Shoot more aggressively when enemies are close
                 if (closestEnemyDistance < 150) return true;  // Always shoot if enemy is close
                 if (closestEnemyDistance < 300) return Random.Shared.Next(100) < 70; // 70% chance
                 return Random.Shared.Next(100) < 40; // 40% chance for distant enemies
             }
-            
+
             return false;
         }
 
@@ -1072,7 +1074,7 @@ namespace VoiceGame
                 {
                     // Score based on distance and threat level
                     float score = distance;
-                    
+
                     // Prefer enemies closer to player (higher threat)
                     float distanceToPlayer = (float)Math.Sqrt(
                         Math.Pow(enemy.Position.X - player.Position.X, 2) +
@@ -1141,77 +1143,77 @@ namespace VoiceGame
         private float CalculateFormationThreatLevel()
         {
             if (companions.Count == 0) return 0f;
-            
+
             float threatLevel = 0f;
-            
+
             // Count nearby enemies and bullets
-            int nearbyEnemies = enemies.Count(e => 
-                Math.Sqrt(Math.Pow(e.Position.X - player.Position.X, 2) + 
+            int nearbyEnemies = enemies.Count(e =>
+                Math.Sqrt(Math.Pow(e.Position.X - player.Position.X, 2) +
                          Math.Pow(e.Position.Y - player.Position.Y, 2)) < 150);
-            
-            int nearbyBullets = enemyBullets.Count(b => 
-                Math.Sqrt(Math.Pow(b.Position.X - player.Position.X, 2) + 
+
+            int nearbyBullets = enemyBullets.Count(b =>
+                Math.Sqrt(Math.Pow(b.Position.X - player.Position.X, 2) +
                          Math.Pow(b.Position.Y - player.Position.Y, 2)) < 100);
-            
+
             // Calculate threat based on enemy density and bullet count
             threatLevel = (nearbyEnemies * 0.2f) + (nearbyBullets * 0.1f);
-            
+
             // Bonus threat reduction if companions are alive and in good formation
             float companionBonus = companions.Count * 0.1f;
             threatLevel = Math.Max(0, threatLevel - companionBonus);
-            
+
             return Math.Min(threatLevel, 1f); // Cap at 1.0
         }
 
         private float GetCompanionSurvivalEffectiveness()
         {
             if (companions.Count == 0) return 0f;
-            
+
             float effectiveness = 0f;
-            
+
             foreach (var companion in companions)
             {
                 // Reward companions that are alive and actively shooting
                 var timeSinceLastShot = DateTime.UtcNow - companion.LastShotTime;
                 bool isActivelyShooting = timeSinceLastShot.TotalSeconds < 2.0;
-                
+
                 // Reward good positioning (not too close to enemies)
-                float minEnemyDistance = enemies.Count > 0 ? 
-                    enemies.Min(e => (float)Math.Sqrt(Math.Pow(e.Position.X - companion.Position.X, 2) + 
+                float minEnemyDistance = enemies.Count > 0 ?
+                    enemies.Min(e => (float)Math.Sqrt(Math.Pow(e.Position.X - companion.Position.X, 2) +
                                                      Math.Pow(e.Position.Y - companion.Position.Y, 2))) : 100f;
-                
+
                 bool isSafelyPositioned = minEnemyDistance > 50f;
-                
+
                 // Penalize edge positioning (being too close to screen edges)
                 float edgeDistance = Math.Min(
                     Math.Min(companion.Position.X, ClientSize.Width - companion.Position.X),
                     Math.Min(companion.Position.Y, ClientSize.Height - companion.Position.Y)
                 );
                 bool isNearEdge = edgeDistance < 60f;
-                
+
                 // Penalize stationary behavior (low velocity)
                 float velocity = (float)Math.Sqrt(companion.Velocity.X * companion.Velocity.X + companion.Velocity.Y * companion.Velocity.Y);
                 bool isStationary = velocity < 1f;
-                
+
                 // Calculate effectiveness score with penalties
                 float companionScore = 0.2f; // Base survival bonus
                 if (isActivelyShooting) companionScore += 0.15f;
                 if (isSafelyPositioned) companionScore += 0.1f;
-                
+
                 // Apply penalties
                 if (isNearEdge) companionScore *= GameConstants.EdgePenaltyMultiplier;
                 if (isStationary) companionScore *= GameConstants.StationaryPenaltyMultiplier;
-                
+
                 effectiveness += companionScore;
             }
-            
+
             return Math.Min(effectiveness, 1f);
         }
 
         private bool IsCompanionFireSupportActive()
         {
             if (companions.Count == 0) return false;
-            
+
             // Check if any companions have shot recently (within last 3 seconds)
             foreach (var companion in companions)
             {
@@ -1221,7 +1223,7 @@ namespace VoiceGame
                     return true;
                 }
             }
-            
+
             return false;
         }
 
@@ -1230,16 +1232,16 @@ namespace VoiceGame
             // Create enhanced state vector with companion information including bullets
             var enemyData = enemies.Select(e => (e.Position, (float)GameConstants.EnemyRadius)).ToList();
             var allLaserData = lasers.Concat(companionBullets).Select(l => (l.Position, l.Velocity)).ToList();
-            
+
             var dataCollector = new DataCollector();
             return dataCollector.EncodeGameState(
-                player.Position, 
+                player.Position,
                 player.Velocity,
-                enemyData, 
+                enemyData,
                 allLaserData,
-                lives, 
+                lives,
                 gameOver,
-                ClientSize.Width, 
+                ClientSize.Width,
                 ClientSize.Height,
                 player.TargetPosition,
                 companions,
@@ -1319,16 +1321,16 @@ namespace VoiceGame
                 if (player.IsMovingToTarget && player.TargetPosition.HasValue)
                 {
                     var target = player.TargetPosition.Value;
-                    
+
                     // Draw target crosshair
                     using var targetPen = new Pen(Color.LimeGreen, 3);
                     float crossSize = 10f;
                     g.DrawLine(targetPen, target.X - crossSize, target.Y, target.X + crossSize, target.Y);
                     g.DrawLine(targetPen, target.X, target.Y - crossSize, target.X, target.Y + crossSize);
-                    
+
                     // Draw circle around target
                     g.DrawEllipse(targetPen, target.X - 15, target.Y - 15, 30, 30);
-                    
+
                     // Draw path line from player to target
                     using var pathPen = new Pen(Color.LimeGreen, 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash };
                     g.DrawLine(pathPen, player.Position, target);
@@ -1360,7 +1362,7 @@ namespace VoiceGame
                     GameConstants.EnemyRadius * 2,
                     GameConstants.EnemyRadius * 2);
             }
-            
+
             // Draw bosses (larger and different color)
             foreach (var boss in bosses)
             {
@@ -1373,32 +1375,32 @@ namespace VoiceGame
                     1 => Brushes.Yellow,        // Low health
                     _ => Brushes.Gray           // Should not happen
                 };
-                
+
                 // Draw boss (larger than regular enemies)
                 g.FillEllipse(bossBrush,
                     boss.Position.X - GameConstants.BossRadius,
                     boss.Position.Y - GameConstants.BossRadius,
                     GameConstants.BossRadius * 2,
                     GameConstants.BossRadius * 2);
-                
+
                 // Draw boss border
                 g.DrawEllipse(Pens.White,
                     boss.Position.X - GameConstants.BossRadius,
                     boss.Position.Y - GameConstants.BossRadius,
                     GameConstants.BossRadius * 2,
                     GameConstants.BossRadius * 2);
-                
+
                 // Draw health bar above boss
                 var healthBarWidth = 40f;
                 var healthBarHeight = 6f;
                 var healthPercentage = (float)boss.Health / boss.MaxHealth;
-                
+
                 g.FillRectangle(Brushes.Red,
                     boss.Position.X - healthBarWidth / 2,
                     boss.Position.Y - GameConstants.BossRadius - 15,
                     healthBarWidth,
                     healthBarHeight);
-                    
+
                 g.FillRectangle(Brushes.Green,
                     boss.Position.X - healthBarWidth / 2,
                     boss.Position.Y - GameConstants.BossRadius - 15,
@@ -1464,8 +1466,8 @@ namespace VoiceGame
                 {
                     using var formationPen = new Pen(Color.Yellow, 1) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dot };
                     g.DrawLine(formationPen, companion.Position, companion.FormationTarget);
-                    g.FillEllipse(Brushes.Yellow, 
-                        companion.FormationTarget.X - 2, 
+                    g.FillEllipse(Brushes.Yellow,
+                        companion.FormationTarget.X - 2,
                         companion.FormationTarget.Y - 2, 4, 4);
                 }
 
@@ -1488,7 +1490,7 @@ namespace VoiceGame
             g.DrawString("AI is learning to shoot!", smallFont, Brushes.Yellow, 10, 70);
             g.DrawString("Random movement enabled!", smallFont, Brushes.Orange, 10, 85);
             g.DrawString("Enemies don't damage on contact", smallFont, Brushes.LightGreen, 10, 100);
-            
+
             // Prominent AI Mode Toggle Display
             if (aiMode)
             {
@@ -1503,7 +1505,7 @@ namespace VoiceGame
                 g.DrawString("Right-click to set target position!", smallFont, Brushes.LimeGreen, 10, 150);
                 g.DrawString("Voice: north/south/east/west to move", smallFont, Brushes.White, 10, 165);
             }
-            
+
             // Movement status
             if (!aiMode && player.IsMovingToTarget && player.TargetPosition.HasValue)
             {
