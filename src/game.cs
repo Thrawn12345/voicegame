@@ -32,6 +32,8 @@ namespace VoiceGame
         private readonly FormationAI formationAI = new();
         private AIPlayer? aiPlayer = null;
         private bool aiMode = false;
+        private bool soloCompanionMode = false; // Solo companion mode (only 1 companion)
+        private bool companionOnlyMode = false; // Companion-only mode (no player)
 
         // Counters for AI training
         private int enemiesDestroyed = 0;
@@ -74,15 +76,23 @@ namespace VoiceGame
 
         private void InitializeGameSystems()
         {
-            // Initialize player
-            player = new Player(new PointF(Width / 2, Height / 2), PointF.Empty);
+            // Initialize player (unless companion-only mode)
+            if (!companionOnlyMode)
+            {
+                player = new Player(new PointF(Width / 2, Height / 2), PointF.Empty);
+            }
+            else
+            {
+                // In companion-only mode, set player off-screen with 0 health
+                player = new Player(new PointF(-1000, -1000), PointF.Empty, 0);
+            }
 
             // Initialize systems
             gameLogic = new GameLogic(obstacleManager);
             voiceController = new VoiceController(OnVelocityChange);
 
             // Generate obstacles
-            obstacleManager.GenerateObstacles(ClientSize, player.Position);
+            obstacleManager.GenerateObstacles(ClientSize, new PointF(Width / 2, Height / 2));
         }
 
         private void InitializeTimers()
@@ -113,9 +123,17 @@ namespace VoiceGame
             trainingCollector.StartEpisode();
 
             // Make sure player is positioned first, then initialize companions
-            if (player.Position == PointF.Empty)
+            if (!companionOnlyMode)
             {
-                player = new Player(new PointF(ClientSize.Width / 2, ClientSize.Height / 2), PointF.Empty, GameConstants.InitialLives);
+                if (player.Position == PointF.Empty)
+                {
+                    player = new Player(new PointF(ClientSize.Width / 2, ClientSize.Height / 2), PointF.Empty, GameConstants.InitialLives);
+                }
+            }
+            else
+            {
+                // Companion-only mode: player is off-screen and dead
+                player = new Player(new PointF(-1000, -1000), PointF.Empty, 0);
             }
 
             InitializeCompanions();
@@ -125,42 +143,59 @@ namespace VoiceGame
         {
             companions.Clear();
 
-            // Create 3 companions with different roles
+            // Create companions based on mode
             float playerX = ClientSize.Width / 2f;
             float playerY = ClientSize.Height / 2f;
 
-            // Companion 1: Left flank (left side support)
-            companions.Add(new Companion(
-                Position: new PointF(playerX - 80, playerY - 40),
-                Velocity: PointF.Empty,
-                Id: 1,
-                Role: CompanionRole.LeftFlank,
-                FormationTarget: PointF.Empty,
-                LastShotTime: DateTime.MinValue,
-                Health: GameConstants.CompanionHealth
-            ));
+            if (soloCompanionMode)
+            {
+                // Solo mode: Only 1 companion (rear support)
+                companions.Add(new Companion(
+                    Position: new PointF(playerX, playerY - 80),
+                    Velocity: PointF.Empty,
+                    Id: 1,
+                    Role: CompanionRole.Rear,
+                    FormationTarget: PointF.Empty,
+                    LastShotTime: DateTime.MinValue,
+                    Health: GameConstants.CompanionHealth
+                ));
+            }
+            else
+            {
+                // Normal mode: 3 companions with different roles
+                // Companion 1: Left flank (left side support)
+                companions.Add(new Companion(
+                    Position: new PointF(playerX - 80, playerY - 40),
+                    Velocity: PointF.Empty,
+                    Id: 1,
+                    Role: CompanionRole.LeftFlank,
+                    FormationTarget: PointF.Empty,
+                    LastShotTime: DateTime.MinValue,
+                    Health: GameConstants.CompanionHealth
+                ));
 
-            // Companion 2: Right flank (right side support)
-            companions.Add(new Companion(
-                Position: new PointF(playerX + 80, playerY - 40),
-                Velocity: PointF.Empty,
-                Id: 2,
-                Role: CompanionRole.RightFlank,
-                FormationTarget: PointF.Empty,
-                LastShotTime: DateTime.MinValue,
-                Health: GameConstants.CompanionHealth
-            ));
+                // Companion 2: Right flank (right side support)
+                companions.Add(new Companion(
+                    Position: new PointF(playerX + 80, playerY - 40),
+                    Velocity: PointF.Empty,
+                    Id: 2,
+                    Role: CompanionRole.RightFlank,
+                    FormationTarget: PointF.Empty,
+                    LastShotTime: DateTime.MinValue,
+                    Health: GameConstants.CompanionHealth
+                ));
 
-            // Companion 3: Rear support (rear positioning)
-            companions.Add(new Companion(
-                Position: new PointF(playerX, playerY - 100),
-                Velocity: PointF.Empty,
-                Id: 3,
-                Role: CompanionRole.Rear,
-                FormationTarget: PointF.Empty,
-                LastShotTime: DateTime.MinValue,
-                Health: GameConstants.CompanionHealth
-            ));
+                // Companion 3: Rear support (rear positioning)
+                companions.Add(new Companion(
+                    Position: new PointF(playerX, playerY - 100),
+                    Velocity: PointF.Empty,
+                    Id: 3,
+                    Role: CompanionRole.Rear,
+                    FormationTarget: PointF.Empty,
+                    LastShotTime: DateTime.MinValue,
+                    Health: GameConstants.CompanionHealth
+                ));
+            }
 
             Console.WriteLine($"🤖 Initialized {companions.Count} AI companions at screen center ({playerX}, {playerY})");
 
@@ -256,6 +291,24 @@ namespace VoiceGame
             {
                 RestartGame();
             }
+            else if (e.KeyCode == Keys.S && !gameOver)
+            {
+                // Toggle solo companion mode with 'S' key
+                soloCompanionMode = !soloCompanionMode;
+                string mode = soloCompanionMode ? "SOLO (1 companion)" : "NORMAL (3 companions)";
+                Console.WriteLine($"🎮 Companion mode switched to: {mode}");
+                voiceController.Speak(mode);
+                RestartGame(); // Restart to apply new mode
+            }
+            else if (e.KeyCode == Keys.C && !gameOver)
+            {
+                // Toggle companion-only mode with 'C' key
+                companionOnlyMode = !companionOnlyMode;
+                string mode = companionOnlyMode ? "COMPANION ONLY (no player)" : "NORMAL (with player)";
+                Console.WriteLine($"🤖 Game mode switched to: {mode}");
+                voiceController.Speak(mode);
+                RestartGame(); // Restart to apply new mode
+            }
         }
 
         private void RestartGame()
@@ -275,8 +328,15 @@ namespace VoiceGame
             companions.Clear();
             bossesDefeated = 0;
 
-            // Reset player position
-            player = new Player(new PointF(Width / 2, Height / 2), PointF.Empty, GameConstants.InitialLives);
+            // Reset player position (unless companion-only mode)
+            if (!companionOnlyMode)
+            {
+                player = new Player(new PointF(Width / 2, Height / 2), PointF.Empty, GameConstants.InitialLives);
+            }
+            else
+            {
+                player = new Player(new PointF(-1000, -1000), PointF.Empty, 0);
+            }
 
             // Regenerate obstacles
             obstacleManager.GenerateObstacles(ClientSize, player.Position);
@@ -580,7 +640,7 @@ namespace VoiceGame
                     var dx = player.Position.X - boss.Position.X;
                     var dy = player.Position.Y - boss.Position.Y;
                     var distance = (float)Math.Sqrt(dx * dx + dy * dy);
-                    
+
                     bossVelocity = PointF.Empty;
                     if (distance > 0)
                     {
@@ -589,7 +649,7 @@ namespace VoiceGame
                         bossVelocity = new PointF(normalizedDx * boss.Speed, normalizedDy * boss.Speed);
                     }
                 }
-                
+
                 var newBossPos = new PointF(boss.Position.X + bossVelocity.X, boss.Position.Y + bossVelocity.Y);
                 var validBossPos = CollisionDetector.GetValidPosition(boss.Position, newBossPos, GameConstants.BossRadius, obstacleManager.GetObstacles(), ClientSize);
                 updatedBosses.Add(boss with { Position = validBossPos, Velocity = bossVelocity });
@@ -804,7 +864,7 @@ namespace VoiceGame
             // Save enemy learning models
             enemyLearning.SaveModels();
             Console.WriteLine("🧠 Enemy learning data saved");
-            
+
             // Save boss learning models
             bossLearning.SaveModels();
             Console.WriteLine("👹 Boss learning data saved");
@@ -832,7 +892,8 @@ namespace VoiceGame
                     Health: GameConstants.BossHealth,
                     MaxHealth: GameConstants.BossHealth,
                     LastSpecialAttack: DateTime.MinValue
-                ) { LearningId = learningId };
+                )
+                { LearningId = learningId };
 
                 bosses.Add(boss);
                 Console.WriteLine($"👹 BOSS SPAWNED! Health: {GameConstants.BossHealth} (Enemy kills: {enemiesDestroyed})");
@@ -898,11 +959,11 @@ namespace VoiceGame
                         {
                             bosses.RemoveAt(j);
                             bossesDefeated++;
-                            
+
                             // Boss learning: defeat penalty
                             if (boss.LearningId >= 0)
                                 bossLearning.BossDefeated(boss.LearningId);
-                            
+
                             Console.WriteLine($"💀 BOSS DEFEATED! Total bosses defeated: {bossesDefeated}");
                             voiceController.Speak("Boss defeated!");
                         }
@@ -949,17 +1010,17 @@ namespace VoiceGame
             {
                 for (int i = bosses.Count - 1; i >= 0; i--)
                 {
-                if (CollisionDetector.CheckPlayerBossCollision(player, bosses[i]))
-                {
-                    var boss = bosses[i];
-                    player = player with { Health = player.Health - 2 }; // Boss does double damage
-                    lives = player.Health;
-                    
-                    // Boss learning: reward for hitting player
-                    if (boss.LearningId >= 0)
-                        bossLearning.BossHitPlayer(boss.LearningId);
-                    
-                    Console.WriteLine($"💥💥 Boss collision! Player took 2 damage! Health: {player.Health}/3");                        if (player.Health <= 0)
+                    if (CollisionDetector.CheckPlayerBossCollision(player, bosses[i]))
+                    {
+                        var boss = bosses[i];
+                        player = player with { Health = player.Health - 2 }; // Boss does double damage
+                        lives = player.Health;
+
+                        // Boss learning: reward for hitting player
+                        if (boss.LearningId >= 0)
+                            bossLearning.BossHitPlayer(boss.LearningId);
+
+                        Console.WriteLine($"💥💥 Boss collision! Player took 2 damage! Health: {player.Health}/3"); if (player.Health <= 0)
                         {
                             HandlePlayerDeath();
                         }
