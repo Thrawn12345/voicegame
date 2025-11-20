@@ -51,6 +51,11 @@ namespace VoiceGame
         public GameForm()
         {
             InitializeForm();
+        }
+
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
             InitializeGameSystems();
             InitializeTimers();
             StartGame();
@@ -143,11 +148,63 @@ namespace VoiceGame
         {
             companions.Clear();
 
-            // Create companions based on mode
-            float playerX = ClientSize.Width / 2f;
-            float playerY = ClientSize.Height / 2f;
+            // Create companions based on mode - use actual form dimensions
+            float playerX = Width / 2f;
+            float playerY = Height / 2f;
 
-            if (soloCompanionMode)
+            Console.WriteLine($"📍 Spawning companions at screen center: ({playerX:F1}, {playerY:F1})");
+
+            if (companionOnlyMode)
+            {
+                // Companion-only mode: spawn in center of screen
+                if (soloCompanionMode)
+                {
+                    // Solo companion-only: 1 companion in center
+                    companions.Add(new Companion(
+                        Position: new PointF(playerX, playerY),
+                        Velocity: PointF.Empty,
+                        Id: 1,
+                        Role: CompanionRole.Rear,
+                        FormationTarget: PointF.Empty,
+                        LastShotTime: DateTime.MinValue,
+                        Health: GameConstants.CompanionHealth
+                    ));
+                }
+                else
+                {
+                    // Multiple companions in center formation
+                    companions.Add(new Companion(
+                        Position: new PointF(playerX - 40, playerY),
+                        Velocity: PointF.Empty,
+                        Id: 1,
+                        Role: CompanionRole.LeftFlank,
+                        FormationTarget: PointF.Empty,
+                        LastShotTime: DateTime.MinValue,
+                        Health: GameConstants.CompanionHealth
+                    ));
+
+                    companions.Add(new Companion(
+                        Position: new PointF(playerX + 40, playerY),
+                        Velocity: PointF.Empty,
+                        Id: 2,
+                        Role: CompanionRole.RightFlank,
+                        FormationTarget: PointF.Empty,
+                        LastShotTime: DateTime.MinValue,
+                        Health: GameConstants.CompanionHealth
+                    ));
+
+                    companions.Add(new Companion(
+                        Position: new PointF(playerX, playerY - 50),
+                        Velocity: PointF.Empty,
+                        Id: 3,
+                        Role: CompanionRole.Rear,
+                        FormationTarget: PointF.Empty,
+                        LastShotTime: DateTime.MinValue,
+                        Health: GameConstants.CompanionHealth
+                    ));
+                }
+            }
+            else if (soloCompanionMode)
             {
                 // Solo mode: Only 1 companion (rear support)
                 companions.Add(new Companion(
