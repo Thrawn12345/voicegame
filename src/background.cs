@@ -14,10 +14,10 @@ namespace VoiceGame
     /// </summary>
     public class BackgroundCyclicTrainer
     {
-        private AutoTrainer autoTrainer;
-        private ShootingRangeSystem shootingRange;
-        private DodgeTrainingSystem dodgeTrainer;
-        private Random random;
+        private AutoTrainer? autoTrainer;
+        private ShootingRangeSystem? shootingRange;
+        private DodgeTrainingSystem? dodgeTrainer;
+        private Random? random;
 
         // Training phase management
         private TrainingPhase currentPhase = TrainingPhase.GameAI;

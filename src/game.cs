@@ -27,6 +27,7 @@ namespace VoiceGame
         private readonly AIShootingAgent aiAgent = new();
         private readonly TrainingDataCollector trainingCollector = new();
         private readonly EnemyLearningAgent enemyLearning = new();
+        private readonly BossLearningAgent bossLearning = new();
         private readonly PathfindingSystem pathfinding = new();
         private readonly FormationAI formationAI = new();
         private AIPlayer? aiPlayer = null;
@@ -250,6 +251,10 @@ namespace VoiceGame
                     TopMost = true;
                     Console.WriteLine("🖥️ Switched to fullscreen mode");
                 }
+            }
+            else if (e.KeyCode == Keys.F5)
+            {
+                RestartGame();
             }
         }
 
@@ -477,6 +482,13 @@ namespace VoiceGame
             // Handle companion collisions with enemies and bullets
             HandleCompanionCollisions();
 
+            // Check for game over condition when player and all companions are dead
+            if (player.Health <= 0 && companions.Count == 0 && !gameOver)
+            {
+                EndGame();
+                return;
+            }
+
             var updatedLasers = gameLogic.UpdateLasers(lasers, ClientSize);
             lasers.Clear();
             lasers.AddRange(updatedLasers);
@@ -540,6 +552,50 @@ namespace VoiceGame
             var finalEnemies = gameLogic.UpdateEnemies(updatedEnemies, player, ClientSize);
             enemies.Clear();
             enemies.AddRange(finalEnemies);
+
+            // Update bosses with AI learning
+            var updatedBosses = new List<Boss>();
+            foreach (var boss in bosses)
+            {
+                PointF bossVelocity;
+                if (boss.LearningId >= 0)
+                {
+                    // Use learned movement
+                    bossVelocity = bossLearning.GetMovementDecision(
+                        boss.LearningId,
+                        boss.Position,
+                        player.Position,
+                        player.Velocity,
+                        lasers,
+                        companions,
+                        ClientSize.Width,
+                        ClientSize.Height,
+                        boss.Health,
+                        boss.MaxHealth
+                    );
+                }
+                else
+                {
+                    // Fallback: chase the player
+                    var dx = player.Position.X - boss.Position.X;
+                    var dy = player.Position.Y - boss.Position.Y;
+                    var distance = (float)Math.Sqrt(dx * dx + dy * dy);
+                    
+                    bossVelocity = PointF.Empty;
+                    if (distance > 0)
+                    {
+                        var normalizedDx = dx / distance;
+                        var normalizedDy = dy / distance;
+                        bossVelocity = new PointF(normalizedDx * boss.Speed, normalizedDy * boss.Speed);
+                    }
+                }
+                
+                var newBossPos = new PointF(boss.Position.X + bossVelocity.X, boss.Position.Y + bossVelocity.Y);
+                var validBossPos = CollisionDetector.GetValidPosition(boss.Position, newBossPos, GameConstants.BossRadius, obstacleManager.GetObstacles(), ClientSize);
+                updatedBosses.Add(boss with { Position = validBossPos, Velocity = bossVelocity });
+            }
+            bosses.Clear();
+            bosses.AddRange(updatedBosses);
 
             // Handle enemy shooting with learning
             for (int i = 0; i < enemies.Count; i++)
@@ -748,6 +804,10 @@ namespace VoiceGame
             // Save enemy learning models
             enemyLearning.SaveModels();
             Console.WriteLine("🧠 Enemy learning data saved");
+            
+            // Save boss learning models
+            bossLearning.SaveModels();
+            Console.WriteLine("👹 Boss learning data saved");
         }
 
         private void SpawnBoss()
@@ -762,6 +822,7 @@ namespace VoiceGame
 
             if (spawnPos.HasValue)
             {
+                int learningId = bossLearning.RegisterBoss();
                 var boss = new Boss(
                     Position: spawnPos.Value,
                     Speed: GameConstants.BossSpeed,
@@ -771,7 +832,7 @@ namespace VoiceGame
                     Health: GameConstants.BossHealth,
                     MaxHealth: GameConstants.BossHealth,
                     LastSpecialAttack: DateTime.MinValue
-                );
+                ) { LearningId = learningId };
 
                 bosses.Add(boss);
                 Console.WriteLine($"👹 BOSS SPAWNED! Health: {GameConstants.BossHealth} (Enemy kills: {enemiesDestroyed})");
@@ -829,10 +890,19 @@ namespace VoiceGame
                         lasers.RemoveAt(i);
                         Console.WriteLine($"💥 Boss hit! Health: {damagedBoss.Health}/{boss.MaxHealth}");
 
+                        // Boss learning: penalty for getting hit
+                        if (boss.LearningId >= 0)
+                            bossLearning.BossHitByLaser(boss.LearningId);
+
                         if (damagedBoss.Health <= 0)
                         {
                             bosses.RemoveAt(j);
                             bossesDefeated++;
+                            
+                            // Boss learning: defeat penalty
+                            if (boss.LearningId >= 0)
+                                bossLearning.BossDefeated(boss.LearningId);
+                            
                             Console.WriteLine($"💀 BOSS DEFEATED! Total bosses defeated: {bossesDefeated}");
                             voiceController.Speak("Boss defeated!");
                         }
@@ -879,13 +949,17 @@ namespace VoiceGame
             {
                 for (int i = bosses.Count - 1; i >= 0; i--)
                 {
-                    if (CollisionDetector.CheckPlayerBossCollision(player, bosses[i]))
-                    {
-                        player = player with { Health = player.Health - 2 }; // Boss does double damage
-                        lives = player.Health;
-                        Console.WriteLine($"💥💥 Boss collision! Player took 2 damage! Health: {player.Health}/3");
-
-                        if (player.Health <= 0)
+                if (CollisionDetector.CheckPlayerBossCollision(player, bosses[i]))
+                {
+                    var boss = bosses[i];
+                    player = player with { Health = player.Health - 2 }; // Boss does double damage
+                    lives = player.Health;
+                    
+                    // Boss learning: reward for hitting player
+                    if (boss.LearningId >= 0)
+                        bossLearning.BossHitPlayer(boss.LearningId);
+                    
+                    Console.WriteLine($"💥💥 Boss collision! Player took 2 damage! Health: {player.Health}/3");                        if (player.Health <= 0)
                         {
                             HandlePlayerDeath();
                         }
@@ -1069,8 +1143,8 @@ namespace VoiceGame
                     Math.Pow(enemy.Position.Y - companion.Position.Y, 2)
                 );
 
-                // Companions have limited range
-                if (distance <= 200f)
+                // Companions have same range as player
+                if (distance <= GameConstants.CompanionShootRange)
                 {
                     // Score based on distance and threat level
                     float score = distance;

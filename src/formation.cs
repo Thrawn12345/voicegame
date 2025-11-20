@@ -85,6 +85,33 @@ namespace VoiceGame
                     Math.Max(15, Math.Min(windowHeight - 15, newPosition.Y))
                 );
 
+                // Final collision check with obstacles
+                if (CollisionDetector.CheckCompanionObstacleCollision(companion with { Position = newPosition }, obstacles))
+                {
+                    // If collision, try to find a nearby valid position
+                    newPosition = FindNonCollidingPosition(companion.Position, newPosition, obstacles, windowWidth, windowHeight);
+                }
+
+                // Check collision with other companions
+                foreach (var otherCompanion in updatedCompanions)
+                {
+                    if (CollisionDetector.CheckCompanionCompanionCollision(companion with { Position = newPosition }, otherCompanion))
+                    {
+                        // Push away from other companion
+                        float dx = newPosition.X - otherCompanion.Position.X;
+                        float dy = newPosition.Y - otherCompanion.Position.Y;
+                        float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                        if (dist > 0)
+                        {
+                            float pushDist = GameConstants.CompanionRadius * 2.2f - dist;
+                            newPosition = new PointF(
+                                newPosition.X + (dx / dist) * pushDist,
+                                newPosition.Y + (dy / dist) * pushDist
+                            );
+                        }
+                    }
+                }
+
                 updatedCompanions.Add(companion with 
                 { 
                     Position = newPosition,
@@ -94,6 +121,25 @@ namespace VoiceGame
             }
 
             return updatedCompanions;
+        }
+
+        private PointF FindNonCollidingPosition(PointF currentPos, PointF intendedPos, List<Obstacle> obstacles, int windowWidth, int windowHeight)
+        {
+            // Simple slide along the obstacle
+            var horizontalCheck = new PointF(intendedPos.X, currentPos.Y);
+            if (!CollisionDetector.CheckObstacleCollision(horizontalCheck, GameConstants.CompanionRadius, obstacles))
+            {
+                return horizontalCheck;
+            }
+
+            var verticalCheck = new PointF(currentPos.X, intendedPos.Y);
+            if (!CollisionDetector.CheckObstacleCollision(verticalCheck, GameConstants.CompanionRadius, obstacles))
+            {
+                return verticalCheck;
+            }
+
+            // If both fail, stay put
+            return currentPos;
         }
 
         /// <summary>

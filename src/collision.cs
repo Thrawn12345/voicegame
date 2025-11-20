@@ -181,5 +181,10 @@ namespace VoiceGame
 
             return collidingIndices;
         }
+
+        public static bool CheckCompanionObstacleCollision(Companion companion, List<Obstacle> obstacles)
+        {
+            return CheckObstacleCollision(companion.Position, GameConstants.CompanionRadius, obstacles);
+        }
     }
 }

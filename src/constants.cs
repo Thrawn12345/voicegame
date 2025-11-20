@@ -38,6 +38,7 @@ namespace VoiceGame
         public const int CompanionShootCooldownMs = AIShootingInterval; // Same as player AI shooting rate
         public const int CompanionRadius = 12; // Same as enemy radius
         public const int CompanionHealth = 3; // 3 lives like player
+        public const int CompanionShootRange = 500; // Same range as player (effectively unlimited)
         
         // Reward system
         public const float PerfectRunBonusMultiplier = 2.5f; // Extra reward for no hits
@@ -54,7 +55,7 @@ namespace VoiceGame
         public const int BossSpawnInterval = 15; // Spawn boss every 15 enemy kills
         public const int BossHealth = 5; // Boss has 5 lives
         public const int BossRadius = 25; // Larger than regular enemies
-        public const float BossSpeed = PlayerSpeed * 0.8f; // Slightly slower than player
+        public const float BossSpeed = PlayerSpeed * 1.2f; // Faster than player for more aggressive movement
         public const int BossShootCooldownMs = 1000; // Faster shooting than regular enemies
         public const int BossSpecialAttackCooldownMs = 3000; // Special attack every 3 seconds
         

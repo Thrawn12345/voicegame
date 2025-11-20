@@ -67,6 +67,7 @@ namespace VoiceGame
                 EnemyBehavior.Flanking => GetFlankingDirection(enemy, player),
                 EnemyBehavior.Cautious => GetCautiousDirection(enemy, player),
                 EnemyBehavior.Ambush => GetAmbushDirection(enemy, player, obstacles),
+                EnemyBehavior.BossRampage => GetAggressiveDirection(enemy, player), // Boss movement
                 _ => PointF.Empty
             };
 

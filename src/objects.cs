@@ -11,7 +11,10 @@ namespace VoiceGame
     public record Enemy(PointF Position, float Speed, DateTime LastShotTime, EnemyBehavior Behavior, DateTime LastBehaviorChange, int LearningId);
 
     // Boss enemy with multiple lives and enhanced abilities
-    public record Boss(PointF Position, float Speed, DateTime LastShotTime, EnemyBehavior Behavior, DateTime LastBehaviorChange, int Health, int MaxHealth, DateTime LastSpecialAttack);
+    public record Boss(PointF Position, float Speed, DateTime LastShotTime, EnemyBehavior Behavior, DateTime LastBehaviorChange, int Health, int MaxHealth, DateTime LastSpecialAttack)
+    {        public PointF Velocity { get; init; } = PointF.Empty;
+        public int LearningId { get; init; } = -1;
+    }
 
     public record EnemyBullet(PointF Position, PointF Velocity);
     public record Obstacle(PointF Position, SizeF Size);

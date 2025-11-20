@@ -31,6 +31,24 @@ namespace VoiceGame
 
                 switch (command)
                 {
+                    case "cyclic":
+                    case "train-cyclic":
+                        // Run cyclic training mode
+                        Console.WriteLine("🎮 Starting Cyclic Training Mode");
+                        Console.WriteLine("Press Ctrl+C to stop training\n");
+                        
+                        var cyclicTrainer = new BackgroundCyclicTrainer();
+                        var cts = new System.Threading.CancellationTokenSource();
+                        
+                        Console.CancelKeyPress += (s, e) =>
+                        {
+                            e.Cancel = true;
+                            cts.Cancel();
+                        };
+                        
+                        System.Threading.Tasks.Task.Run(async () => await cyclicTrainer.RunCyclicTraining(cts.Token)).Wait();
+                        return;
+
                     case "collect":
                         // Run automated data collection
                         TimeSpan duration = TimeSpan.FromHours(11);
@@ -79,11 +97,6 @@ namespace VoiceGame
                     case "range":
                         // Run shooting range training system
                         RunShootingRange();
-                        return;
-
-                    case "cyclic":
-                        // Run background cyclic training system
-                        RunBackgroundCyclicTraining();
                         return;
 
                     case "models":

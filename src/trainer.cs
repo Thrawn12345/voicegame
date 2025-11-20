@@ -383,7 +383,7 @@ namespace VoiceGame
         }
 
         /// <summary>
-        /// Calculate enhanced reward that considers companion coordination.
+        /// Calculate enhanced reward that considers companion coordination, wall proximity, and movement.
         /// </summary>
         public float CalculateCompanionAwareReward(
             int enemiesDestroyed,
@@ -393,14 +393,42 @@ namespace VoiceGame
             int companionsAlive,
             FormationType formationType,
             float formationEfficiency,
-            bool companionFireSupport)
+            bool companionFireSupport,
+            PointF currentPosition,
+            PointF previousPosition,
+            int windowWidth,
+            int windowHeight,
+            float deltaTime)
         {
             float baseReward = 0f;
             
             // Base rewards
             baseReward += enemiesDestroyed * 10f;    // Enemy kills
-            baseReward += bulletsDestroyed * 2f;     // Bullet dodging
+            baseReward += bulletsDestroyed * 8f;     // Bullet destruction (increased from 2 to 8)
             baseReward += lives * 5f;                // Staying alive
+            
+            // Wall proximity penalty (discourage wall-hugging)
+            float edgeMargin = 80f;
+            bool nearWall = currentPosition.X < edgeMargin || currentPosition.X > windowWidth - edgeMargin ||
+                           currentPosition.Y < edgeMargin || currentPosition.Y > windowHeight - edgeMargin;
+            if (nearWall)
+            {
+                baseReward -= 8f; // Strong penalty for being near walls
+            }
+            
+            // Stationary penalty (discourage camping)
+            float moveDist = (float)Math.Sqrt(
+                Math.Pow(currentPosition.X - previousPosition.X, 2) +
+                Math.Pow(currentPosition.Y - previousPosition.Y, 2));
+            
+            if (moveDist < 3f && deltaTime > 1f) // Barely moved for over 1 second
+            {
+                baseReward -= 10f; // Heavy penalty for staying still
+            }
+            else if (moveDist > 5f)
+            {
+                baseReward += 2f; // Small reward for active movement
+            }
             
             // Penalty for game over
             if (gameOver)
