@@ -8,7 +8,10 @@ namespace VoiceGame
 
     public record Laser(PointF Position, PointF Velocity);
 
-    public record Enemy(PointF Position, float Speed, DateTime LastShotTime, EnemyBehavior Behavior, DateTime LastBehaviorChange, int LearningId);
+    public record Enemy(PointF Position, float Speed, DateTime LastShotTime, EnemyBehavior Behavior, DateTime LastBehaviorChange, int LearningId)
+    {
+        public int Health { get; init; } = GameConstants.EnemyHealth; // Default health for training
+    }
 
     // Boss enemy with multiple lives and enhanced abilities
     public record Boss(PointF Position, float Speed, DateTime LastShotTime, EnemyBehavior Behavior, DateTime LastBehaviorChange, int Health, int MaxHealth, DateTime LastSpecialAttack)
@@ -33,6 +36,7 @@ namespace VoiceGame
         Flanking,    // Try to circle around player
         Cautious,    // Keep distance and shoot
         Ambush,      // Hide behind obstacles and wait
+        Patrol,      // Patrol area during stealth phase
         BossRampage, // Boss special aggressive mode
         BossDefensive // Boss defensive with rapid fire
     }

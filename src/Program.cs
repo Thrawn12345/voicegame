@@ -33,20 +33,22 @@ namespace VoiceGame
                 {
                     case "cyclic":
                     case "train-cyclic":
-                        // Run cyclic training mode
-                        Console.WriteLine("🎮 Starting Cyclic Training Mode");
+                        // Run new separated AI cyclic training mode
+                        Console.WriteLine("🎮 Starting Separated AI Cyclic Training Mode");
+                        Console.WriteLine("Training 8 separate AI agents (Player/Companion/Enemy/Boss Movement+Shooting)");
                         Console.WriteLine("Press Ctrl+C to stop training\n");
                         
-                        var cyclicTrainer = new BackgroundCyclicTrainer();
                         var cts = new System.Threading.CancellationTokenSource();
+                        var orchestrator = new CyclicTrainingOrchestrator(new System.Drawing.Size(1920, 1080));
                         
                         Console.CancelKeyPress += (s, e) =>
                         {
                             e.Cancel = true;
                             cts.Cancel();
+                            Console.WriteLine("\n🛑 Stopping training...");
                         };
                         
-                        System.Threading.Tasks.Task.Run(async () => await cyclicTrainer.RunCyclicTraining(cts.Token)).Wait();
+                        orchestrator.RunCyclicTraining(cts.Token, episodesPerCycle: 50);
                         return;
 
                     case "collect":

@@ -30,6 +30,7 @@ namespace VoiceGame
         private readonly BossLearningAgent bossLearning = new();
         private readonly PathfindingSystem pathfinding = new();
         private readonly FormationAI formationAI = new();
+        private readonly StealthPhaseManager stealthPhase = new();
         private AIPlayer? aiPlayer = null;
         private bool aiMode = false;
         private bool soloCompanionMode = false; // Solo companion mode (only 1 companion)
@@ -142,6 +143,9 @@ namespace VoiceGame
             }
 
             InitializeCompanions();
+            
+            // Start stealth phase with 3-6 patrolling enemies
+            StartStealthPhase();
         }
 
         private void InitializeCompanions()
@@ -261,6 +265,58 @@ namespace VoiceGame
             {
                 Console.WriteLine($"   Companion {companion.Id} ({companion.Role}): Position ({companion.Position.X:F1}, {companion.Position.Y:F1})");
             }
+        }
+
+        private void StartStealthPhase()
+        {
+            // Clear existing enemies
+            enemies.Clear();
+            
+            // Spawn 3-6 patrolling enemies for stealth phase
+            int enemyCount = random.Next(GameConstants.StealthMinEnemies, GameConstants.StealthMaxEnemies + 1);
+            for (int i = 0; i < enemyCount; i++)
+            {
+                PointF spawnPos = GetRandomPosition(GameConstants.MinEnemySpawnDistance);
+                enemies.Add(new Enemy(
+                    Position: spawnPos,
+                    Speed: GameConstants.StealthEnemyPatrolSpeed,
+                    LastShotTime: DateTime.Now,
+                    Behavior: EnemyBehavior.Patrol,
+                    LastBehaviorChange: DateTime.Now,
+                    LearningId: -1
+                )
+                {
+                    Health = GameConstants.EnemyHealth
+                });
+            }
+            
+            // Start stealth phase (loads AI agents if available)
+            stealthPhase.StartStealthPhase();
+            
+            Console.WriteLine($"🥷 Stealth phase started with {enemyCount} patrolling enemies!");
+            Console.WriteLine($"   Detection range: {GameConstants.EnemyDetectionRange}px");
+            Console.WriteLine($"   Duration: {GameConstants.StealthPhaseDurationMs / 1000}s");
+        }
+
+        private PointF GetRandomPosition(float minDistanceFromPlayer)
+        {
+            PointF pos;
+            do
+            {
+                pos = new PointF(
+                    random.Next(50, ClientSize.Width - 50),
+                    random.Next(50, ClientSize.Height - 50)
+                );
+            } while (Vector2Distance(pos, player.Position) < minDistanceFromPlayer);
+            
+            return pos;
+        }
+
+        private float Vector2Distance(PointF a, PointF b)
+        {
+            float dx = a.X - b.X;
+            float dy = a.Y - b.Y;
+            return (float)Math.Sqrt(dx * dx + dy * dy);
         }
 
         private void OnVelocityChange(PointF velocity)
@@ -462,18 +518,29 @@ namespace VoiceGame
         {
             if (gameOver) return;
 
+            // Update stealth phase
+            if (stealthPhase.IsStealthPhase)
+            {
+                stealthPhase.Update(player.Position, enemies, ClientSize);
+            }
+
             // Stop player movement and control if dead (but companions still alive)
             bool playerAlive = player.Health > 0;
 
+            // Stealth Mode: Use stealth AI for player movement during stealth phase
+            if (stealthPhase.IsStealthPhase && playerAlive)
+            {
+                var stealthVelocity = stealthPhase.GetPlayerStealthMovement(player.Position, enemies, ClientSize);
+                player = player with { Velocity = stealthVelocity, TargetPosition = null, IsMovingToTarget = false };
+            }
             // Clear movement if switching from AI to manual mid-game
-            if (!aiMode && !player.IsMovingToTarget)
+            else if (!aiMode && !player.IsMovingToTarget)
             {
                 // In manual mode, only move if explicitly commanded (voice or target)
                 // This prevents residual AI movement
             }
-
             // AI Mode: Let AI control player movement (highest priority) - only if player is alive
-            if (aiMode && aiPlayer != null && playerAlive)
+            else if (aiMode && aiPlayer != null && playerAlive)
             {
                 var aiVelocity = aiPlayer.GetRecommendedVelocity(
                     player.Position, player.Velocity,
@@ -623,7 +690,32 @@ namespace VoiceGame
             var updatedEnemies = new List<Enemy>();
             foreach (var enemy in enemies)
             {
-                if (enemy.LearningId >= 0)
+                // During stealth phase, use patrol AI
+                if (stealthPhase.IsStealthPhase)
+                {
+                    var patrolVelocity = stealthPhase.GetEnemyPatrolMovement(
+                        enemy.GetHashCode(),
+                        enemy.Position,
+                        ClientSize,
+                        new Rectangle(0, 0, ClientSize.Width, ClientSize.Height)
+                    );
+                    
+                    var newPos = new PointF(
+                        enemy.Position.X + patrolVelocity.X,
+                        enemy.Position.Y + patrolVelocity.Y
+                    );
+                    
+                    var validPos = CollisionDetector.GetValidPosition(
+                        enemy.Position,
+                        newPos,
+                        GameConstants.EnemyRadius,
+                        obstacleManager.Obstacles.ToList(),
+                        ClientSize
+                    );
+                    
+                    updatedEnemies.Add(enemy with { Position = validPos });
+                }
+                else if (enemy.LearningId >= 0)
                 {
                     // Use learned movement
                     var learnedVelocity = enemyLearning.GetMovementDecision(
@@ -714,15 +806,17 @@ namespace VoiceGame
             bosses.Clear();
             bosses.AddRange(updatedBosses);
 
-            // Handle enemy shooting with learning
-            for (int i = 0; i < enemies.Count; i++)
+            // Handle enemy shooting with learning (disabled during stealth phase)
+            if (!stealthPhase.IsStealthPhase)
             {
-                var enemy = enemies[i];
-
-                if (enemy.LearningId >= 0)
+                for (int i = 0; i < enemies.Count; i++)
                 {
-                    // Use learned shooting
-                    bool shouldShoot = enemyLearning.ShouldShoot(
+                    var enemy = enemies[i];
+
+                    if (enemy.LearningId >= 0)
+                    {
+                        // Use learned shooting
+                        bool shouldShoot = enemyLearning.ShouldShoot(
                         enemy.LearningId,
                         enemy.Position,
                         player.Position,
@@ -757,6 +851,7 @@ namespace VoiceGame
                         enemies[i] = enemy with { LastShotTime = DateTime.Now };
                     }
                 }
+            }
             }
 
             // Process collisions
@@ -960,38 +1055,41 @@ namespace VoiceGame
 
         private void CheckBossCollisions()
         {
-            // Boss shooting
-            for (int i = 0; i < bosses.Count; i++)
+            // Boss shooting (disabled during stealth phase)
+            if (!stealthPhase.IsStealthPhase)
             {
-                var boss = bosses[i];
-
-                // Boss shoots more frequently
-                if (DateTime.Now - boss.LastShotTime > TimeSpan.FromMilliseconds(GameConstants.BossShootCooldownMs))
+                for (int i = 0; i < bosses.Count; i++)
                 {
-                    // Boss shoots at player or nearest companion
-                    var target = GetNearestTarget(boss.Position);
-                    if (target != PointF.Empty)
-                    {
-                        var direction = new PointF(target.X - boss.Position.X, target.Y - boss.Position.Y);
-                        var distance = (float)Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y);
+                    var boss = bosses[i];
 
-                        if (distance > 0)
+                    // Boss shoots more frequently
+                    if (DateTime.Now - boss.LastShotTime > TimeSpan.FromMilliseconds(GameConstants.BossShootCooldownMs))
+                    {
+                        // Boss shoots at player or nearest companion
+                        var target = GetNearestTarget(boss.Position);
+                        if (target != PointF.Empty)
                         {
-                            direction = new PointF(direction.X / distance, direction.Y / distance);
-                            var bulletVelocity = new PointF(
-                                direction.X * GameConstants.EnemyBulletSpeed * 1.2f, // Boss bullets are faster
-                                direction.Y * GameConstants.EnemyBulletSpeed * 1.2f
-                            );
-                            enemyBullets.Add(new EnemyBullet(boss.Position, bulletVelocity));
-                            bosses[i] = boss with { LastShotTime = DateTime.Now };
+                            var direction = new PointF(target.X - boss.Position.X, target.Y - boss.Position.Y);
+                            var distance = (float)Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y);
+
+                            if (distance > 0)
+                            {
+                                direction = new PointF(direction.X / distance, direction.Y / distance);
+                                var bulletVelocity = new PointF(
+                                    direction.X * GameConstants.EnemyBulletSpeed * 1.2f, // Boss bullets are faster
+                                    direction.Y * GameConstants.EnemyBulletSpeed * 1.2f
+                                );
+                                enemyBullets.Add(new EnemyBullet(boss.Position, bulletVelocity));
+                                bosses[i] = boss with { LastShotTime = DateTime.Now };
+                            }
                         }
                     }
-                }
 
-                // Special attack every 3 seconds (burst fire)
-                if (DateTime.Now - boss.LastSpecialAttack > TimeSpan.FromMilliseconds(GameConstants.BossSpecialAttackCooldownMs))
-                {
-                    BossSpecialAttack(boss, i);
+                    // Special attack every 3 seconds (burst fire)
+                    if (DateTime.Now - boss.LastSpecialAttack > TimeSpan.FromMilliseconds(GameConstants.BossSpecialAttackCooldownMs))
+                    {
+                        BossSpecialAttack(boss, i);
+                    }
                 }
             }
 
@@ -1162,6 +1260,10 @@ namespace VoiceGame
         private void AIShootingTimer_Tick(object? sender, EventArgs e)
         {
             if (gameOver) return;
+
+            // No shooting allowed during stealth phase
+            if (stealthPhase.IsStealthPhase)
+                return;
 
             // Only allow player to shoot if alive
             bool playerAlive = player.Health > 0;
@@ -1447,6 +1549,10 @@ namespace VoiceGame
         {
             if (gameOver) return;
 
+            // No enemy spawning during stealth phase
+            if (stealthPhase.IsStealthPhase)
+                return;
+
             var newEnemy = gameLogic.SpawnEnemy(player, ClientSize, enemyLearning);
             if (newEnemy != null)
             {
@@ -1608,6 +1714,13 @@ namespace VoiceGame
 
             // Draw companions
             DrawCompanions(g);
+
+            // Draw stealth phase UI and detection radii
+            if (stealthPhase.IsStealthPhase)
+            {
+                stealthPhase.DrawEnemyDetectionRadius(g, enemies);
+                stealthPhase.DrawStealthUI(g, ClientSize);
+            }
 
             DrawUI(g);
         }

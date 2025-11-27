@@ -17,6 +17,8 @@ namespace VoiceGame
         public const int EnemyShootRange = 200; // pixels
         public const int EnemyFlankingDistance = 100; // Distance for flanking behavior
         public const int EnemyRetreatDistance = 50; // Distance to maintain when retreating
+        public const int EnemyHealth = 100; // Default enemy health
+        public const int LaserDamage = 34; // Damage per laser hit (3 hits to kill)
 
         // Timer intervals
         public const int GameTimerInterval = 16; // 60 FPS
@@ -58,6 +60,7 @@ namespace VoiceGame
         public const float BossSpeed = PlayerSpeed * 1.2f; // Faster than player for more aggressive movement
         public const int BossShootCooldownMs = 1000; // Faster shooting than regular enemies
         public const int BossSpecialAttackCooldownMs = 3000; // Special attack every 3 seconds
+        public const int BossBulletSpeed = EnemyBulletSpeed + 2; // Even faster than enemy bullets
         
         // Enhanced reward system
         public const float ProximityRewardRange = 50f; // Range for near-miss rewards
@@ -75,5 +78,12 @@ namespace VoiceGame
         public const int MaxHazards = 6;
         public const float HazardDamage = 0.5f; // Half damage from environmental hazards
         public const int MovingObstacleSpeed = 2;
+        
+        // Stealth phase settings
+        public const int StealthPhaseDurationMs = 15000; // 15 seconds stealth phase
+        public const int EnemyDetectionRange = 30; // 30 pixel detection range during stealth
+        public const int StealthEnemyPatrolSpeed = 2; // Slower patrol speed
+        public const int StealthMinEnemies = 3; // Minimum enemies during stealth
+        public const int StealthMaxEnemies = 6; // Maximum enemies during stealth
     }
 }
