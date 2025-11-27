@@ -35,6 +35,7 @@ namespace VoiceGame
         private bool aiMode = false;
         private bool soloCompanionMode = false; // Solo companion mode (only 1 companion)
         private bool companionOnlyMode = false; // Companion-only mode (no player)
+        private bool enableStealthPhase = true; // Enable/disable stealth phase at game start
 
         // Counters for AI training
         private int enemiesDestroyed = 0;
@@ -51,6 +52,12 @@ namespace VoiceGame
 
         public GameForm()
         {
+            InitializeForm();
+        }
+
+        public GameForm(bool enableStealth = true)
+        {
+            this.enableStealthPhase = enableStealth;
             InitializeForm();
         }
 
@@ -136,11 +143,14 @@ namespace VoiceGame
                     player = new Player(new PointF(ClientSize.Width / 2, ClientSize.Height / 2), PointF.Empty, GameConstants.InitialLives);
                 }
             }
-            else
+            InitializeCompanions();
+            
+            // Start stealth phase with 3-6 patrolling enemies (if enabled)
+            if (enableStealthPhase)
             {
-                // Companion-only mode: player is off-screen and dead
-                player = new Player(new PointF(-1000, -1000), PointF.Empty, 0);
+                StartStealthPhase();
             }
+        }   }
 
             InitializeCompanions();
             
@@ -412,6 +422,14 @@ namespace VoiceGame
                 Console.WriteLine($"🎮 Companion mode switched to: {mode}");
                 voiceController.Speak(mode);
                 RestartGame(); // Restart to apply new mode
+            }
+            else if (e.KeyCode == Keys.T && !gameOver)
+            {
+                // Toggle stealth phase with 'T' key
+                enableStealthPhase = !enableStealthPhase;
+                string mode = enableStealthPhase ? "ENABLED" : "DISABLED";
+                Console.WriteLine($"🥷 Stealth phase at game start: {mode}");
+                Console.WriteLine("   Press F5 to restart with new setting");
             }
             else if (e.KeyCode == Keys.C && !gameOver)
             {
@@ -1830,6 +1848,8 @@ namespace VoiceGame
 
             // Fullscreen controls
             g.DrawString("ESC: Exit fullscreen | F11: Toggle fullscreen", smallFont, Brushes.Gray, 10, ClientSize.Height - 60);
+            g.DrawString("F5: Restart | A: Toggle AI | S: Solo Mode | C: Companion Only", smallFont, Brushes.Gray, 10, ClientSize.Height - 40);
+            g.DrawString($"T: Toggle Stealth Phase ({(enableStealthPhase ? "ON" : "OFF")})", smallFont, enableStealthPhase ? Brushes.Yellow : Brushes.Gray, 10, ClientSize.Height - 20);
             g.DrawString($"Screen: {ClientSize.Width}x{ClientSize.Height}", smallFont, Brushes.Gray, 10, ClientSize.Height - 80);
 
             if (gameOver)

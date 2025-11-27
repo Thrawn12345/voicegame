@@ -51,6 +51,14 @@ namespace VoiceGame
                         orchestrator.RunCyclicTraining(cts.Token, episodesPerCycle: 50);
                         return;
 
+                    case "nostealth":
+                        // Run game without stealth phase
+                        Console.WriteLine("🎮 Starting game WITHOUT stealth phase");
+                        Application.EnableVisualStyles();
+                        Application.SetCompatibleTextRenderingDefault(false);
+                        Application.Run(new GameForm(enableStealth: false));
+                        return;
+
                     case "collect":
                         // Run automated data collection
                         TimeSpan duration = TimeSpan.FromHours(11);
@@ -322,34 +330,39 @@ namespace VoiceGame
             Console.WriteLine("╚════════════════════════════════════════════╝\n");
 
             Console.WriteLine("GAMEPLAY:");
-            Console.WriteLine("  dotnet run                  Launch game (default)\n");
+            Console.WriteLine("  dotnet run                     Launch game (default)");
+            Console.WriteLine("  dotnet run -- nostealth        Launch game without stealth phase\n");
 
             Console.WriteLine("DATA COLLECTION:");
-            Console.WriteLine("  dotnet run -- collect       Collect 11 hours of data");
-            Console.WriteLine("  dotnet run -- collect 24    Collect 24 hours of data");
-            Console.WriteLine("  dotnet run -- collect 4     Collect 4 hours of data\n");
+            Console.WriteLine("  dotnet run -- collect          Collect 11 hours of data");
+            Console.WriteLine("  dotnet run -- collect 24       Collect 24 hours of data");
+            Console.WriteLine("  dotnet run -- collect 4        Collect 4 hours of data\n");
 
             Console.WriteLine("AI TRAINING:");
-            Console.WriteLine("  dotnet run -- train         Train AI model on collected data");
-            Console.WriteLine("  dotnet run -- analyze       View training data statistics");
-            Console.WriteLine("  dotnet run -- export        Export data for ML frameworks");
-            Console.WriteLine("  dotnet run -- auto          Run infinite AI vs AI training");
-            Console.WriteLine("  dotnet run -- dodge         Run specialized dodge & movement training");
-            Console.WriteLine("  dotnet run -- range         Run shooting range with alternating training cycles");
+            Console.WriteLine("  dotnet run -- train            Train AI model on collected data");
+            Console.WriteLine("  dotnet run -- analyze          View training data statistics");
+            Console.WriteLine("  dotnet run -- export           Export data for ML frameworks");
+            Console.WriteLine("  dotnet run -- auto             Run infinite AI vs AI training");
+            Console.WriteLine("  dotnet run -- dodge            Run specialized dodge & movement training");
+            Console.WriteLine("  dotnet run -- range            Run shooting range with alternating training cycles");
+            Console.WriteLine("  dotnet run -- cyclic           Train all 11 Q-learning agents sequentially");
             Console.WriteLine("");
             Console.WriteLine("📊 REPORTING SYSTEM:");
             Console.WriteLine("  All training modes now generate detailed hourly JSON reports");
             Console.WriteLine("  Reports are saved to: ./training_reports/");
             Console.WriteLine("  Each report includes: performance metrics, AI progress, recommendations");
-            Console.WriteLine("  dotnet run -- interactive   Launch interactive trainer menu\n");
+            Console.WriteLine("  dotnet run -- interactive      Launch interactive trainer menu\n");
 
             Console.WriteLine("MODEL MANAGEMENT:");
-            Console.WriteLine("  dotnet run -- models        Show current AI models");
-            Console.WriteLine("  dotnet run -- cleanup       Clean old files & migrate models\n");
+            Console.WriteLine("  dotnet run -- models           Show current AI models");
+            Console.WriteLine("  dotnet run -- cleanup          Clean old files & migrate models\n");
 
             Console.WriteLine("EXAMPLES:");
-            Console.WriteLine("  # Play the game normally");
+            Console.WriteLine("  # Play the game normally (with stealth phase)");
             Console.WriteLine("  dotnet run\n");
+
+            Console.WriteLine("  # Play the game without stealth phase");
+            Console.WriteLine("  dotnet run -- nostealth\n");
 
             Console.WriteLine("  # Collect 11 hours of automated training data");
             Console.WriteLine("  dotnet run -- collect\n");
@@ -362,6 +375,9 @@ namespace VoiceGame
 
             Console.WriteLine("  # Run infinite AI vs AI training (Press Ctrl+C to stop)");
             Console.WriteLine("  dotnet run -- auto\n");
+
+            Console.WriteLine("  # Train all 11 separated Q-learning agents");
+            Console.WriteLine("  dotnet run -- cyclic\n");
         }
     }
 }
