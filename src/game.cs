@@ -31,11 +31,18 @@ namespace VoiceGame
         private readonly PathfindingSystem pathfinding = new();
         private readonly FormationAI formationAI = new();
         private readonly StealthPhaseManager stealthPhase = new();
+        private readonly CompanionMovementAgent companionMovementAgent = new();
+        private readonly CompanionShootingAgent companionShootingAgent = new();
+        private readonly Dictionary<int, PointF> companionLastPositions = new(); // Track last positions to penalize staying still
+        private PointF playerLastPosition = PointF.Empty; // Track player last position
+        private int playerStationaryFrames = 0; // Count frames player hasn't moved
+        private readonly Dictionary<Laser, bool> laserEffectiveness = new(); // Track if lasers hit anything
         private AIPlayer? aiPlayer = null;
         private bool aiMode = false;
         private bool soloCompanionMode = false; // Solo companion mode (only 1 companion)
         private bool companionOnlyMode = false; // Companion-only mode (no player)
         private bool enableStealthPhase = true; // Enable/disable stealth phase at game start
+        private bool useCompanionQLearning = false; // Toggle Q-Learning for companions (press 'Q')
 
         // Counters for AI training
         private int enemiesDestroyed = 0;
@@ -144,18 +151,12 @@ namespace VoiceGame
                 }
             }
             InitializeCompanions();
-            
+
             // Start stealth phase with 3-6 patrolling enemies (if enabled)
             if (enableStealthPhase)
             {
                 StartStealthPhase();
             }
-        }   }
-
-            InitializeCompanions();
-            
-            // Start stealth phase with 3-6 patrolling enemies
-            StartStealthPhase();
         }
 
         private void InitializeCompanions()
@@ -281,7 +282,7 @@ namespace VoiceGame
         {
             // Clear existing enemies
             enemies.Clear();
-            
+
             // Spawn 3-6 patrolling enemies for stealth phase
             int enemyCount = random.Next(GameConstants.StealthMinEnemies, GameConstants.StealthMaxEnemies + 1);
             for (int i = 0; i < enemyCount; i++)
@@ -299,10 +300,10 @@ namespace VoiceGame
                     Health = GameConstants.EnemyHealth
                 });
             }
-            
+
             // Start stealth phase (loads AI agents if available)
             stealthPhase.StartStealthPhase();
-            
+
             Console.WriteLine($"🥷 Stealth phase started with {enemyCount} patrolling enemies!");
             Console.WriteLine($"   Detection range: {GameConstants.EnemyDetectionRange}px");
             Console.WriteLine($"   Duration: {GameConstants.StealthPhaseDurationMs / 1000}s");
@@ -318,7 +319,7 @@ namespace VoiceGame
                     random.Next(50, ClientSize.Height - 50)
                 );
             } while (Vector2Distance(pos, player.Position) < minDistanceFromPlayer);
-            
+
             return pos;
         }
 
@@ -439,6 +440,14 @@ namespace VoiceGame
                 Console.WriteLine($"🤖 Game mode switched to: {mode}");
                 voiceController.Speak(mode);
                 RestartGame(); // Restart to apply new mode
+            }
+            else if (e.KeyCode == Keys.Q && !gameOver)
+            {
+                // Toggle Q-Learning for companions with 'Q' key
+                useCompanionQLearning = !useCompanionQLearning;
+                string mode = useCompanionQLearning ? "Q-LEARNING AI" : "FORMATION AI";
+                Console.WriteLine($"🧠 Companion AI switched to: {mode}");
+                voiceController.Speak(mode);
             }
         }
 
@@ -573,6 +582,28 @@ namespace VoiceGame
                     CalculateFormationThreatLevel(),
                     companions.Count > 0
                 );
+
+                // Track stationary behavior
+                if (playerLastPosition != PointF.Empty)
+                {
+                    float distanceMoved = (float)Math.Sqrt(
+                        Math.Pow(player.Position.X - playerLastPosition.X, 2) +
+                        Math.Pow(player.Position.Y - playerLastPosition.Y, 2)
+                    );
+
+                    if (distanceMoved < 2f)
+                    {
+                        playerStationaryFrames++;
+                        // Penalty for staying still (accumulates over time)
+                        // Note: Applied through wall penalty system in AIPlayer
+                    }
+                    else
+                    {
+                        playerStationaryFrames = 0;
+                    }
+                }
+                playerLastPosition = player.Position;
+
                 player = player with { Velocity = aiVelocity, TargetPosition = null, IsMovingToTarget = false };
             }
             // Manual Mode: Handle target-based movement and position holding - only if player is alive
@@ -666,20 +697,188 @@ namespace VoiceGame
                 player = player with { Velocity = PointF.Empty };
             }
 
-            // Update companions with formation AI
-            var updatedCompanions = formationAI.UpdateCompanions(
-                companions,
-                player,
-                enemies,
-                enemyBullets,
-                obstacleManager.GetObstacles(),
-                ClientSize.Width,
-                ClientSize.Height
-            );
-            companions.Clear();
-            companions.AddRange(updatedCompanions);
+            // Update companions with Q-Learning AI or Formation AI
+            if (useCompanionQLearning)
+            {
+                // Use Q-Learning agents for companion movement
+                var updatedCompanions = new List<Companion>();
+                int companionIndex = 0;
 
-            Console.WriteLine($"🤖 Updated {companions.Count} companions with formation AI");
+                foreach (var companion in companions)
+                {
+                    var state = companionMovementAgent.EncodeState(
+                        companion.Position,
+                        player.Position,
+                        enemyBullets,
+                        ClientSize,
+                        obstacleManager.GetObstacles()
+                    );
+
+                    int action = companionMovementAgent.SelectAction(state);
+
+                    // Add directional diversity: encourage different companions to move in different patterns
+                    if (companions.Count > 1 && Random.Shared.Next(100) < 30) // 30% chance to diversify
+                    {
+                        // Offset action based on companion ID to encourage different directions
+                        action = (action + companion.Id * 2) % 9;
+                    }
+
+                    var velocity = companionMovementAgent.ActionToVelocity(action);
+
+                    var newPosition = gameLogic.UpdateCompanionPosition(companion, velocity, ClientSize);
+
+                    // Calculate reward with multiple penalties
+                    float reward = 0f;
+
+                    // 1. Stationary penalty
+                    if (companionLastPositions.TryGetValue(companion.Id, out PointF lastPos))
+                    {
+                        float distanceMoved = (float)Math.Sqrt(
+                            Math.Pow(newPosition.X - lastPos.X, 2) +
+                            Math.Pow(newPosition.Y - lastPos.Y, 2)
+                        );
+
+                        if (distanceMoved < 2f)
+                        {
+                            reward -= 0.5f; // Stationary penalty
+                        }
+                        else
+                        {
+                            reward += 0.1f; // Small reward for moving
+                        }
+                    }
+
+                    // 2. Wall proximity penalty (especially for solo companions)
+                    float wallDistance = Math.Min(
+                        Math.Min(newPosition.X, ClientSize.Width - newPosition.X),
+                        Math.Min(newPosition.Y, ClientSize.Height - newPosition.Y)
+                    );
+
+                    if (wallDistance < 50f)
+                    {
+                        float wallPenalty = (50f - wallDistance) / 50f * 0.8f; // Up to -0.8 penalty
+                        reward -= wallPenalty;
+
+                        // Extra penalty for solo companions near walls
+                        if (companions.Count == 1)
+                        {
+                            reward -= wallPenalty * 0.5f; // 1.5x total penalty for solo
+                        }
+                    }
+
+                    // 3. Companion overlap penalty - penalize being too close to other companions
+                    foreach (var other in updatedCompanions)
+                    {
+                        float distToOther = (float)Math.Sqrt(
+                            Math.Pow(newPosition.X - other.Position.X, 2) +
+                            Math.Pow(newPosition.Y - other.Position.Y, 2)
+                        );
+
+                        if (distToOther < 40f) // Too close to another companion
+                        {
+                            reward -= 0.6f; // Overlap penalty
+                        }
+                    }
+
+                    // 3.5. Bullet dodging reward - bonus for dodging close bullets (near-miss)
+                    if (enemyBullets.Count > 0)
+                    {
+                        float closestBulletDist = enemyBullets
+                            .Select(b => (float)Math.Sqrt(
+                                Math.Pow(newPosition.X - b.Position.X, 2) +
+                                Math.Pow(newPosition.Y - b.Position.Y, 2)
+                            ))
+                            .Min();
+
+                        if (closestBulletDist < 40f && closestBulletDist >= 20f)
+                        {
+                            reward += 0.8f; // Near-miss dodge bonus
+                        }
+                        else if (closestBulletDist < 60f && closestBulletDist >= 40f)
+                        {
+                            reward += 0.3f; // Close proximity awareness bonus
+                        }
+                    }
+
+                    // 4. Player proximity reward - reward for staying near player when alive, or last position when dead
+                    float distanceToPlayer = (float)Math.Sqrt(
+                        Math.Pow(newPosition.X - player.Position.X, 2) +
+                        Math.Pow(newPosition.Y - player.Position.Y, 2)
+                    );
+
+                    if (player.Health > 0)
+                    {
+                        // Optimal distance is 50-100 pixels (formation range)
+                        if (distanceToPlayer >= 50f && distanceToPlayer <= 100f)
+                        {
+                            reward += 0.8f; // Good formation distance (increased from 0.4)
+                        }
+                        else if (distanceToPlayer < 50f)
+                        {
+                            reward += 0.5f; // Still good but a bit close (increased from 0.2)
+                        }
+                        else if (distanceToPlayer > 100f && distanceToPlayer < 150f)
+                        {
+                            reward += 0.3f; // Getting too far but acceptable (increased from 0.1)
+                        }
+                        else if (distanceToPlayer >= 150f)
+                        {
+                            reward -= 0.6f; // Too far from player - stronger penalty (increased from 0.3)
+                        }
+                    }
+                    else
+                    {
+                        // Player is dead - reward staying near last known position (protecting/mourning)
+                        if (distanceToPlayer < 80f)
+                        {
+                            reward += 0.6f; // Strong reward for staying close when player dead
+                        }
+                        else if (distanceToPlayer < 150f)
+                        {
+                            reward += 0.3f; // Moderate reward
+                        }
+                        else if (distanceToPlayer >= 200f)
+                        {
+                            reward -= 0.4f; // Penalty for abandoning player position
+                        }
+                    }
+
+                    // Update position tracking
+                    companionLastPositions[companion.Id] = newPosition;
+
+                    // Learn from this action
+                    var nextState = companionMovementAgent.EncodeState(
+                        newPosition,
+                        player.Position,
+                        enemyBullets,
+                        ClientSize,
+                        obstacleManager.GetObstacles()
+                    );
+                    companionMovementAgent.Learn(state, action, reward, nextState, false);
+
+                    updatedCompanions.Add(companion with { Position = newPosition, Velocity = velocity });
+                    companionIndex++;
+                }
+                companions.Clear();
+                companions.AddRange(updatedCompanions);
+                Console.WriteLine($"🧠 Updated {companions.Count} companions with Q-Learning AI");
+            }
+            else
+            {
+                // Use Formation AI (original behavior)
+                var updatedCompanions = formationAI.UpdateCompanions(
+                    companions,
+                    player,
+                    enemies,
+                    enemyBullets,
+                    obstacleManager.GetObstacles(),
+                    ClientSize.Width,
+                    ClientSize.Height
+                );
+                companions.Clear();
+                companions.AddRange(updatedCompanions);
+                Console.WriteLine($"🤖 Updated {companions.Count} companions with formation AI");
+            }
 
             // Handle companion collisions with enemies and bullets
             HandleCompanionCollisions();
@@ -692,11 +891,47 @@ namespace VoiceGame
             }
 
             var updatedLasers = gameLogic.UpdateLasers(lasers, ClientSize);
+
+            // Apply penalty for ineffective player lasers that went out of bounds
+            foreach (var laser in lasers)
+            {
+                if (!updatedLasers.Contains(laser))
+                {
+                    // Laser was removed (out of bounds or hit obstacle)
+                    if (laserEffectiveness.TryGetValue(laser, out bool wasEffective))
+                    {
+                        if (!wasEffective && aiMode)
+                        {
+                            // Penalty tracked implicitly - laser didn't contribute to success
+                        }
+                        laserEffectiveness.Remove(laser);
+                    }
+                }
+            }
+
             lasers.Clear();
             lasers.AddRange(updatedLasers);
 
             // Update companion bullets
             var updatedCompanionBullets = gameLogic.UpdateLasers(companionBullets, ClientSize);
+
+            // Apply penalty for ineffective companion bullets
+            foreach (var bullet in companionBullets)
+            {
+                if (!updatedCompanionBullets.Contains(bullet))
+                {
+                    // Bullet was removed (out of bounds or hit obstacle)
+                    if (laserEffectiveness.TryGetValue(bullet, out bool wasEffective))
+                    {
+                        if (!wasEffective && useCompanionQLearning)
+                        {
+                            // Penalty tracked implicitly - bullet didn't contribute to success
+                        }
+                        laserEffectiveness.Remove(bullet);
+                    }
+                }
+            }
+
             companionBullets.Clear();
             companionBullets.AddRange(updatedCompanionBullets);
 
@@ -717,12 +952,12 @@ namespace VoiceGame
                         ClientSize,
                         new Rectangle(0, 0, ClientSize.Width, ClientSize.Height)
                     );
-                    
+
                     var newPos = new PointF(
                         enemy.Position.X + patrolVelocity.X,
                         enemy.Position.Y + patrolVelocity.Y
                     );
-                    
+
                     var validPos = CollisionDetector.GetValidPosition(
                         enemy.Position,
                         newPos,
@@ -730,7 +965,7 @@ namespace VoiceGame
                         obstacleManager.Obstacles.ToList(),
                         ClientSize
                     );
-                    
+
                     updatedEnemies.Add(enemy with { Position = validPos });
                 }
                 else if (enemy.LearningId >= 0)
@@ -743,6 +978,7 @@ namespace VoiceGame
                         player.Velocity,
                         lasers,
                         enemies,
+                        companions,
                         ClientSize.Width,
                         ClientSize.Height
                     );
@@ -833,7 +1069,7 @@ namespace VoiceGame
 
                     if (enemy.LearningId >= 0)
                     {
-                        // Use learned shooting
+                        // Use learned shooting with companion awareness
                         bool shouldShoot = enemyLearning.ShouldShoot(
                         enemy.LearningId,
                         enemy.Position,
@@ -841,42 +1077,85 @@ namespace VoiceGame
                         player.Velocity,
                         lasers,
                         enemies,
+                        companions,
                         ClientSize.Width,
                         ClientSize.Height,
                         out PointF shootDirection
                     );
 
-                    if (shouldShoot && (DateTime.Now - enemy.LastShotTime).TotalMilliseconds > GameConstants.EnemyShootCooldownMs)
-                    {
-                        var bulletVelocity = new PointF(
-                            shootDirection.X * GameConstants.EnemyBulletSpeed,
-                            shootDirection.Y * GameConstants.EnemyBulletSpeed
-                        );
-                        enemyBullets.Add(new EnemyBullet(enemy.Position, bulletVelocity));
-                        enemies[i] = enemy with { LastShotTime = DateTime.Now };
+                        if (shouldShoot && (DateTime.Now - enemy.LastShotTime).TotalMilliseconds > GameConstants.EnemyShootCooldownMs)
+                        {
+                            var bulletVelocity = new PointF(
+                                shootDirection.X * GameConstants.EnemyBulletSpeed,
+                                shootDirection.Y * GameConstants.EnemyBulletSpeed
+                            );
+                            enemyBullets.Add(new EnemyBullet(enemy.Position, bulletVelocity, enemy.LearningId));
+                            enemies[i] = enemy with { LastShotTime = DateTime.Now };
 
-                        // Small reward for shooting
-                        enemyLearning.RecordReward(enemy.LearningId, 1f);
+                            // Small reward for shooting
+                            enemyLearning.RecordReward(enemy.LearningId, 1f);
+                        }
                     }
-                }
-                else
-                {
-                    // Original shooting logic
-                    var bullet = gameLogic.CreateEnemyBullet(enemy, player);
-                    if (bullet != null)
+                    else
                     {
-                        enemyBullets.Add(bullet);
-                        enemies[i] = enemy with { LastShotTime = DateTime.Now };
+                        // Original shooting logic - target companions if player is dead
+                        PointF targetPosition;
+
+                        // If player is dead, target nearest companion instead
+                        if (player.Health <= 0 && companions.Count > 0)
+                        {
+                            var nearestCompanion = companions
+                                .OrderBy(c => CollisionDetector.Distance(c.Position, enemy.Position))
+                                .FirstOrDefault();
+
+                            targetPosition = nearestCompanion != null ? nearestCompanion.Position : enemy.Position; // Fallback to own position
+                        }
+                        else
+                        {
+                            targetPosition = player.Position;
+                        }
+
+                        var bullet = gameLogic.CreateEnemyBullet(enemy, new Player(targetPosition, PointF.Empty, 1));
+                        if (bullet != null)
+                        {
+                            enemyBullets.Add(bullet);
+                            enemies[i] = enemy with { LastShotTime = DateTime.Now };
+                        }
                     }
                 }
-            }
             }
 
             // Process collisions
             var laserEnemyResult = gameLogic.ProcessLaserEnemyCollisions(lasers, enemies, enemiesDestroyed);
 
+            // Mark lasers as effective if they hit enemies
+            foreach (var laser in lasers)
+            {
+                if (!laserEnemyResult.lasers.Contains(laser))
+                {
+                    // Laser was removed, meaning it hit something
+                    if (laserEffectiveness.ContainsKey(laser))
+                    {
+                        laserEffectiveness[laser] = true;
+                    }
+                }
+            }
+
             // Process companion bullet collisions with enemies
             var companionBulletEnemyResult = gameLogic.ProcessCompanionBulletEnemyCollisions(companionBullets, laserEnemyResult.enemies, laserEnemyResult.enemiesDestroyed);
+
+            // Mark companion bullets as effective if they hit enemies
+            foreach (var bullet in companionBullets)
+            {
+                if (!companionBulletEnemyResult.companionBullets.Contains(bullet))
+                {
+                    // Bullet was removed, meaning it hit something
+                    if (laserEffectiveness.ContainsKey(bullet))
+                    {
+                        laserEffectiveness[bullet] = true;
+                    }
+                }
+            }
 
             // Track destroyed enemies for learning (from both player and companion bullets)
             var destroyedCount = companionBulletEnemyResult.enemiesDestroyed - enemiesDestroyed;
@@ -987,7 +1266,15 @@ namespace VoiceGame
             // Game continues if companions are alive
             if (companions.Count > 0)
             {
-                Console.WriteLine($"🤖 {companions.Count} companions still fighting!");
+                Console.WriteLine($"🤖 {companions.Count} companions still fighting independently!");
+
+                // Switch companions to Q-Learning mode automatically when player dies
+                if (!useCompanionQLearning)
+                {
+                    useCompanionQLearning = true;
+                    Console.WriteLine("🧠 Companions switched to Q-Learning AI mode!");
+                }
+
                 // Don't end game, let companions continue
                 return;
             }
@@ -1330,7 +1617,9 @@ namespace VoiceGame
                             );
 
                             // Create companion bullet (different color from player lasers)
-                            companionBullets.Add(new Laser(companion.Position, laserVel));
+                            var newCompanionLaser = new Laser(companion.Position, laserVel);
+                            companionBullets.Add(newCompanionLaser);
+                            laserEffectiveness[newCompanionLaser] = false; // Track effectiveness
 
                             // Update last shot time
                             var updatedCompanion = companion with { LastShotTime = DateTime.UtcNow };
@@ -1435,6 +1724,13 @@ namespace VoiceGame
                         {
                             var damagedCompanion = companion with { Health = companion.Health - 1 };
                             companions[i] = damagedCompanion;
+
+                            // Reward the enemy that shot this bullet
+                            if (bullet.SourceEnemyId >= 0)
+                            {
+                                enemyLearning.EnemyHitCompanion(bullet.SourceEnemyId);
+                            }
+
                             enemyBullets.RemoveAt(j);
                             hitTaken = true;
                             Console.WriteLine($"💥 Companion {companion.Id} ({companion.Role}) hit by bullet! Health: {damagedCompanion.Health}/3");

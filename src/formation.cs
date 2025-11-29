@@ -27,6 +27,12 @@ namespace VoiceGame
             int windowWidth,
             int windowHeight)
         {
+            // If player is dead (or in companion-only mode), switch to independent survival/hunting mode
+            if (player.Health <= 0)
+            {
+                return UpdateIndependentCompanions(companions, enemies, enemyBullets, obstacles, windowWidth, windowHeight);
+            }
+
             // Analyze situation and adapt formation
             var newFormation = AnalyzeSituation(player.Position, enemies, enemyBullets, obstacles);
             if (newFormation != currentFormation && DateTime.UtcNow - lastFormationChange > TimeSpan.FromSeconds(2))
@@ -43,7 +49,7 @@ namespace VoiceGame
                 // Calculate formation target position with survival AI
                 var baseFormationTarget = CalculateFormationPosition(companion, player.Position, currentFormation);
                 var survivalTarget = ApplySurvivalAI(companion, baseFormationTarget, enemies, enemyBullets, obstacles, player, companions);
-                
+
                 // Use pathfinding to navigate to survival-adjusted position
                 var optimalVelocity = pathfinding.GetOptimalVelocity(
                     companion.Position,
@@ -64,9 +70,9 @@ namespace VoiceGame
                 // Final validation: Ensure companion stays within 70-pixel circle and doesn't get too close to player
                 const float maxCircleRadius = 70f;
                 const float minPlayerDistance = GameConstants.PlayerRadius + 15f; // Minimum safe distance from player
-                
+
                 float distanceToPlayer = Distance(newPosition, player.Position);
-                
+
                 // First ensure minimum distance from player
                 if (distanceToPlayer < minPlayerDistance && distanceToPlayer > 0)
                 {
@@ -75,10 +81,10 @@ namespace VoiceGame
                     float pushY = (newPosition.Y - player.Position.Y) / distanceToPlayer * minPlayerDistance;
                     newPosition = new PointF(player.Position.X + pushX, player.Position.Y + pushY);
                 }
-                
+
                 // Then ensure companion stays within 70-pixel circle
                 newPosition = ConstrainToCircle(newPosition, player.Position, maxCircleRadius);
-                
+
                 // Ensure adjusted position is still within screen bounds
                 newPosition = new PointF(
                     Math.Max(15, Math.Min(windowWidth - 15, newPosition.X)),
@@ -112,8 +118,8 @@ namespace VoiceGame
                     }
                 }
 
-                updatedCompanions.Add(companion with 
-                { 
+                updatedCompanions.Add(companion with
+                {
                     Position = newPosition,
                     Velocity = optimalVelocity,
                     FormationTarget = survivalTarget
@@ -149,7 +155,7 @@ namespace VoiceGame
         {
             int nearbyEnemies = enemies.Count(e => Distance(e.Position, playerPosition) < 150);
             int nearbyBullets = enemyBullets.Count(b => Distance(b.Position, playerPosition) < 100);
-            bool inCover = obstacles.Any(o => Distance(playerPosition, new PointF(o.Position.X + o.Size.Width/2, o.Position.Y + o.Size.Height/2)) < 80);
+            bool inCover = obstacles.Any(o => Distance(playerPosition, new PointF(o.Position.X + o.Size.Width / 2, o.Position.Y + o.Size.Height / 2)) < 80);
 
             // Decision logic for formation
             if (nearbyBullets > 3)
@@ -192,8 +198,8 @@ namespace VoiceGame
 
                 FormationType.Wedge => companion.Role switch
                 {
-                    CompanionRole.LeftFlank => new PointF(playerPosition.X - spacing/2 + variation, playerPosition.Y + offset + variation * 0.3f),
-                    CompanionRole.RightFlank => new PointF(playerPosition.X + spacing/2 + variation, playerPosition.Y + offset + variation * 0.3f),
+                    CompanionRole.LeftFlank => new PointF(playerPosition.X - spacing / 2 + variation, playerPosition.Y + offset + variation * 0.3f),
+                    CompanionRole.RightFlank => new PointF(playerPosition.X + spacing / 2 + variation, playerPosition.Y + offset + variation * 0.3f),
                     CompanionRole.Rear => new PointF(playerPosition.X + variation * 0.5f, playerPosition.Y + offset * 1.2f + variation),
                     _ => playerPosition
                 },
@@ -269,7 +275,7 @@ namespace VoiceGame
 
             // Find nearest enemy
             var nearestEnemy = enemies.OrderBy(e => Distance(e.Position, companion.Position)).FirstOrDefault();
-            
+
             if (nearestEnemy != null)
             {
                 float distance = Distance(nearestEnemy.Position, companion.Position);
@@ -294,23 +300,30 @@ namespace VoiceGame
         {
             var adjustedTarget = targetPosition;
             float survivalRadius = 60f; // Radius for threat avoidance
-            
-            // Avoid player - prevent phasing through
+
+            // Avoid player - prevent phasing through (ONLY if player is alive/visible)
+            // In independent mode (player dead/offscreen), we pass a dummy player at targetPos, so distance is 0
+            // We should only avoid if distance is significant (meaning real player)
             float distanceToPlayer = Distance(targetPosition, player.Position);
-            float playerAvoidanceRadius = GameConstants.PlayerRadius + 15f; // Player radius plus buffer
-            if (distanceToPlayer < playerAvoidanceRadius && distanceToPlayer > 0)
+
+            // Only avoid player if they are actually on screen (not the -1000,-1000 dummy)
+            if (player.Position.X > 0 && player.Position.Y > 0)
             {
-                // Push target away from player
-                float pushX = (targetPosition.X - player.Position.X) / distanceToPlayer * 25f;
-                float pushY = (targetPosition.Y - player.Position.Y) / distanceToPlayer * 25f;
-                adjustedTarget = new PointF(adjustedTarget.X + pushX, adjustedTarget.Y + pushY);
+                float playerAvoidanceRadius = GameConstants.PlayerRadius + 15f; // Player radius plus buffer
+                if (distanceToPlayer < playerAvoidanceRadius && distanceToPlayer > 0)
+                {
+                    // Push target away from player
+                    float pushX = (targetPosition.X - player.Position.X) / distanceToPlayer * 25f;
+                    float pushY = (targetPosition.Y - player.Position.Y) / distanceToPlayer * 25f;
+                    adjustedTarget = new PointF(adjustedTarget.X + pushX, adjustedTarget.Y + pushY);
+                }
             }
-            
+
             // Avoid other companions - prevent phasing through each other
             foreach (var otherCompanion in otherCompanions)
             {
                 if (otherCompanion.Id == companion.Id) continue; // Skip self
-                
+
                 float distanceToOther = Distance(targetPosition, otherCompanion.Position);
                 float companionAvoidanceRadius = GameConstants.CompanionRadius + GameConstants.CompanionRadius + 10f; // Two radii plus buffer
                 if (distanceToOther < companionAvoidanceRadius && distanceToOther > 0)
@@ -321,7 +334,7 @@ namespace VoiceGame
                     adjustedTarget = new PointF(adjustedTarget.X + pushX, adjustedTarget.Y + pushY);
                 }
             }
-            
+
             // Avoid nearby enemies
             foreach (var enemy in enemies)
             {
@@ -334,7 +347,7 @@ namespace VoiceGame
                     adjustedTarget = new PointF(adjustedTarget.X + pushX, adjustedTarget.Y + pushY);
                 }
             }
-            
+
             // Avoid incoming bullets
             foreach (var bullet in bullets)
             {
@@ -354,13 +367,13 @@ namespace VoiceGame
                     }
                 }
             }
-            
+
             // Avoid obstacles - prevent companions from phasing through
             foreach (var obstacle in obstacles)
             {
                 float distanceToObstacle = Distance(targetPosition, obstacle.Position);
                 float avoidanceRadius = Math.Max(obstacle.Size.Width, obstacle.Size.Height) / 2f + 15f; // Use larger dimension as radius plus buffer
-                
+
                 if (distanceToObstacle < avoidanceRadius)
                 {
                     // Push target away from obstacle center
@@ -369,7 +382,7 @@ namespace VoiceGame
                     adjustedTarget = new PointF(adjustedTarget.X + pushX, adjustedTarget.Y + pushY);
                 }
             }
-            
+
             // Stay within reasonable radius of original target (coordinate-based positioning)
             float maxDeviation = 80f; // Maximum distance from formation target
             float deviationDistance = Distance(adjustedTarget, targetPosition);
@@ -381,7 +394,7 @@ namespace VoiceGame
                     targetPosition.Y + (adjustedTarget.Y - targetPosition.Y) * ratio
                 );
             }
-            
+
             return adjustedTarget;
         }
 
@@ -391,16 +404,16 @@ namespace VoiceGame
         private static PointF ConstrainToCircle(PointF targetPosition, PointF centerPosition, float maxRadius)
         {
             float distance = Distance(targetPosition, centerPosition);
-            
+
             if (distance <= maxRadius)
             {
                 return targetPosition; // Already within circle
             }
-            
+
             // Calculate direction from center to target
             float directionX = (targetPosition.X - centerPosition.X) / distance;
             float directionY = (targetPosition.Y - centerPosition.Y) / distance;
-            
+
             // Place at maximum radius in the same direction
             return new PointF(
                 centerPosition.X + directionX * maxRadius,
@@ -411,6 +424,101 @@ namespace VoiceGame
         private static float Distance(PointF p1, PointF p2)
         {
             return (float)Math.Sqrt(Math.Pow(p1.X - p2.X, 2) + Math.Pow(p1.Y - p2.Y, 2));
+        }
+
+        /// <summary>
+        /// Updates companions in independent mode (when player is dead).
+        /// They will hunt enemies and survive on their own without formation constraints.
+        /// </summary>
+        private List<Companion> UpdateIndependentCompanions(
+            List<Companion> companions,
+            List<Enemy> enemies,
+            List<EnemyBullet> enemyBullets,
+            List<Obstacle> obstacles,
+            int windowWidth,
+            int windowHeight)
+        {
+            var updatedCompanions = new List<Companion>();
+
+            foreach (var companion in companions)
+            {
+                PointF targetPos;
+
+                // 1. Find a target (nearest enemy or center of screen if no enemies)
+                var nearestEnemy = enemies.OrderBy(e => Distance(companion.Position, e.Position)).FirstOrDefault();
+
+                if (nearestEnemy != null)
+                {
+                    // Move to optimal combat distance (150-200 pixels)
+                    float dist = Distance(companion.Position, nearestEnemy.Position);
+                    if (dist > 200)
+                    {
+                        // Move closer
+                        targetPos = nearestEnemy.Position;
+                    }
+                    else if (dist < 100)
+                    {
+                        // Back away (kiting)
+                        float dx = companion.Position.X - nearestEnemy.Position.X;
+                        float dy = companion.Position.Y - nearestEnemy.Position.Y;
+                        targetPos = new PointF(companion.Position.X + dx, companion.Position.Y + dy);
+                    }
+                    else
+                    {
+                        // Strafe/Hold position
+                        targetPos = companion.Position;
+                    }
+                }
+                else
+                {
+                    // No enemies, patrol near center
+                    targetPos = new PointF(windowWidth / 2, windowHeight / 2);
+                }
+
+                // 2. Apply survival logic (dodge bullets/obstacles)
+                // We pass a dummy player position since we don't want to be tethered to it
+                var survivalTarget = ApplySurvivalAI(companion, targetPos, enemies, enemyBullets, obstacles,
+                    new Player(targetPos, PointF.Empty, 0), companions);
+
+                // 3. Move towards target
+                var optimalVelocity = pathfinding.GetOptimalVelocity(
+                    companion.Position,
+                    survivalTarget,
+                    enemies,
+                    enemyBullets,
+                    obstacles,
+                    windowWidth,
+                    windowHeight
+                );
+
+                // 4. Update position
+                var newPosition = new PointF(
+                    Math.Max(15, Math.Min(windowWidth - 15, companion.Position.X + optimalVelocity.X)),
+                    Math.Max(15, Math.Min(windowHeight - 15, companion.Position.Y + optimalVelocity.Y))
+                );
+
+                // 5. Avoid overlapping with other companions
+                foreach (var other in updatedCompanions)
+                {
+                    if (Distance(newPosition, other.Position) < 30)
+                    {
+                        // Simple separation
+                        float pushX = newPosition.X - other.Position.X;
+                        float pushY = newPosition.Y - other.Position.Y;
+                        newPosition = new PointF(newPosition.X + pushX * 0.5f, newPosition.Y + pushY * 0.5f);
+                    }
+                }
+
+                // Ensure bounds
+                newPosition = new PointF(
+                    Math.Max(15, Math.Min(windowWidth - 15, newPosition.X)),
+                    Math.Max(15, Math.Min(windowHeight - 15, newPosition.Y))
+                );
+
+                updatedCompanions.Add(companion with { Position = newPosition });
+            }
+
+            return updatedCompanions;
         }
     }
 }

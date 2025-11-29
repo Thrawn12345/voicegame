@@ -243,5 +243,23 @@ namespace VoiceGame
 
             return (updatedLasers, updatedBullets, newBulletsDestroyed);
         }
+
+        public PointF UpdateCompanionPosition(Companion companion, PointF velocity, Size screenSize)
+        {
+            var newPos = new PointF(
+                companion.Position.X + velocity.X,
+                companion.Position.Y + velocity.Y
+            );
+
+            var validPos = CollisionDetector.GetValidPosition(
+                companion.Position,
+                newPos,
+                GameConstants.CompanionRadius,
+                obstacleManager.Obstacles.ToList(),
+                screenSize
+            );
+
+            return validPos;
+        }
     }
 }

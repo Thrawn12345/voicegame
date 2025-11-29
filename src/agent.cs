@@ -126,16 +126,49 @@ namespace VoiceGame
                 lives, gameOver, windowWidth, windowHeight, targetPos, enemyBullets, obstacles,
                 companions, formationType, formationThreatLevel, companionFireSupport
             );
-            
-            return ActionToVelocity(action, playerPos, targetPos, enemies, 
-                enemyBullets ?? new List<EnemyBullet>(), 
+
+            var velocity = ActionToVelocity(action, playerPos, targetPos, enemies,
+                enemyBullets ?? new List<EnemyBullet>(),
                 obstacles ?? new List<Obstacle>(), windowWidth, windowHeight);
+
+            // Apply wall proximity penalty by adjusting velocity away from walls
+            float wallPenaltyThreshold = 50f;
+            float distToLeft = playerPos.X;
+            float distToRight = windowWidth - playerPos.X;
+            float distToTop = playerPos.Y;
+            float distToBottom = windowHeight - playerPos.Y;
+
+            // Push away from walls if too close
+            PointF wallAvoidance = PointF.Empty;
+            if (distToLeft < wallPenaltyThreshold)
+            {
+                float strength = (wallPenaltyThreshold - distToLeft) / wallPenaltyThreshold;
+                wallAvoidance.X += strength * GameConstants.PlayerSpeed * 0.5f;
+            }
+            if (distToRight < wallPenaltyThreshold)
+            {
+                float strength = (wallPenaltyThreshold - distToRight) / wallPenaltyThreshold;
+                wallAvoidance.X -= strength * GameConstants.PlayerSpeed * 0.5f;
+            }
+            if (distToTop < wallPenaltyThreshold)
+            {
+                float strength = (wallPenaltyThreshold - distToTop) / wallPenaltyThreshold;
+                wallAvoidance.Y += strength * GameConstants.PlayerSpeed * 0.5f;
+            }
+            if (distToBottom < wallPenaltyThreshold)
+            {
+                float strength = (wallPenaltyThreshold - distToBottom) / wallPenaltyThreshold;
+                wallAvoidance.Y -= strength * GameConstants.PlayerSpeed * 0.5f;
+            }
+
+            // Blend wall avoidance with original velocity
+            return new PointF(velocity.X + wallAvoidance.X, velocity.Y + wallAvoidance.Y);
         }
 
         /// <summary>
         /// Convert action string to velocity vector.
         /// </summary>
-        private PointF ActionToVelocity(string action, PointF? currentPos = null, PointF? targetPos = null, 
+        private PointF ActionToVelocity(string action, PointF? currentPos = null, PointF? targetPos = null,
             List<Enemy>? enemies = null, List<EnemyBullet>? bullets = null, List<Obstacle>? obstacles = null,
             int windowWidth = 800, int windowHeight = 600)
         {
@@ -178,7 +211,7 @@ namespace VoiceGame
         /// <summary>
         /// Get safe velocity toward target avoiding threats.
         /// </summary>
-        private PointF GetSafeTargetVelocity(PointF? currentPos, PointF? targetPos, List<Enemy>? enemies, 
+        private PointF GetSafeTargetVelocity(PointF? currentPos, PointF? targetPos, List<Enemy>? enemies,
             List<EnemyBullet>? bullets, List<Obstacle>? obstacles, int windowWidth, int windowHeight, int speed)
         {
             if (!currentPos.HasValue || !targetPos.HasValue) return PointF.Empty;
@@ -201,7 +234,7 @@ namespace VoiceGame
             List<EnemyBullet>? bullets, List<Obstacle>? obstacles, int windowWidth, int windowHeight, int speed)
         {
             var safeVelocity = GetSafeTargetVelocity(currentPos, targetPos, enemies, bullets, obstacles, windowWidth, windowHeight, speed);
-            
+
             // Add extra random evasion
             var random = new Random();
             float evasionFactor = 0.3f;

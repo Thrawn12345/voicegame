@@ -15,13 +15,14 @@ namespace VoiceGame
 
     // Boss enemy with multiple lives and enhanced abilities
     public record Boss(PointF Position, float Speed, DateTime LastShotTime, EnemyBehavior Behavior, DateTime LastBehaviorChange, int Health, int MaxHealth, DateTime LastSpecialAttack)
-    {        public PointF Velocity { get; init; } = PointF.Empty;
+    {
+        public PointF Velocity { get; init; } = PointF.Empty;
         public int LearningId { get; init; } = -1;
     }
 
-    public record EnemyBullet(PointF Position, PointF Velocity);
+    public record EnemyBullet(PointF Position, PointF Velocity, int SourceEnemyId = -1);
     public record Obstacle(PointF Position, SizeF Size);
-    
+
     // Environmental hazards
     public record EnvironmentalHazard(PointF Position, SizeF Size, HazardType Type, bool IsActive = true, DateTime LastActivation = default);
     public record MovingObstacle(PointF Position, SizeF Size, PointF Velocity, PointF[] PatrolPoints, int CurrentTarget = 0);
@@ -40,7 +41,7 @@ namespace VoiceGame
         BossRampage, // Boss special aggressive mode
         BossDefensive // Boss defensive with rapid fire
     }
-    
+
     // Environmental hazard types
     public enum HazardType
     {
@@ -49,7 +50,7 @@ namespace VoiceGame
         Lava,          // Continuous damage while in area
         MovingCrusher  // Mobile damage zone
     }
-    
+
     // Curriculum learning phases
     public enum TrainingPhase
     {

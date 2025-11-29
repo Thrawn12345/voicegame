@@ -82,7 +82,7 @@ namespace VoiceGame
         {
             Console.WriteLine("🤖 Starting infinite AI vs AI training...");
             Console.WriteLine("   Press Ctrl+C to stop\n");
-            
+
             // Start hourly reporting
             reportingSystem.StartReporting();
 
@@ -100,7 +100,7 @@ namespace VoiceGame
                     Console.WriteLine("╚═══════════════════════════════════════════════╝");
                     TrainAllModels();
                     Console.WriteLine("✅ Training phase complete. Resuming data collection...\\n");
-                    
+
                     // Update reporting with training progress
                     reportingSystem.UpdateMetrics(
                         "Auto Training - AI vs AI",
@@ -125,7 +125,7 @@ namespace VoiceGame
 
             Console.WriteLine("\\n🛑 Training stopped by user");
             SaveAllModels();
-            
+
             // Stop reporting and generate final report
             reportingSystem.StopReporting();
             PrintStatistics();
@@ -151,7 +151,7 @@ namespace VoiceGame
                 if (totalFrames % 1000 == 0)
                 {
                     Console.Write($"\rEpisode {episodeCount + 1} | Frame {frameCount} | Lives {lives} | Enemies {enemies.Count} | Destroyed {enemiesDestroyed}");
-                    
+
                     // Update metrics every 10 episodes
                     if (episodeCount % 10 == 0)
                     {
@@ -241,6 +241,7 @@ namespace VoiceGame
                         player.Velocity,
                         lasers,
                         enemies,
+                        new List<Companion>(), // No companions in automated collection
                         gameSize.Width,
                         gameSize.Height
                     );
@@ -290,6 +291,7 @@ namespace VoiceGame
                         player.Velocity,
                         lasers,
                         enemies,
+                        new List<Companion>(), // No companions in automated collection
                         gameSize.Width,
                         gameSize.Height,
                         out PointF shootDirection
@@ -546,18 +548,18 @@ namespace VoiceGame
         public async Task RunTraining(AutoTrainerConfig config, CancellationToken cancellationToken)
         {
             Console.WriteLine($"🤖 Starting auto-training for {config.NumEpisodes} episodes...");
-            
+
             for (int i = 0; i < config.NumEpisodes && !cancellationToken.IsCancellationRequested; i++)
             {
                 RunEpisode();
                 episodeCount++;
-                
+
                 if (i % 10 == 0)
                 {
                     Console.WriteLine($"   Auto-training episode {i + 1}/{config.NumEpisodes}...");
                 }
             }
-            
+
             Console.WriteLine("🤖 Auto-training complete.");
             await Task.CompletedTask;
         }

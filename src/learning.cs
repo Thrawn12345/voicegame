@@ -41,7 +41,7 @@ namespace VoiceGame
             // Separate trainers for movement and shooting
             var movementConfig = new AITrainer.ModelConfig
             {
-                StateSpaceSize = 20,  // Simpler state for enemies
+                StateSpaceSize = 23,  // Expanded to include nearest companion
                 ActionSpaceSize = 9,  // 8 directions + stop
                 LearningRate = 0.002f,
                 ExplorationRate = epsilon
@@ -49,8 +49,8 @@ namespace VoiceGame
 
             var shootingConfig = new AITrainer.ModelConfig
             {
-                StateSpaceSize = 20,
-                ActionSpaceSize = 3,  // Don't shoot, shoot at player, shoot predictively
+                StateSpaceSize = 23,  // Added 3 for nearest companion
+                ActionSpaceSize = 3,  // Don't shoot, shoot at target, shoot predictively
                 LearningRate = 0.002f,
                 ExplorationRate = epsilon
             };
@@ -81,6 +81,7 @@ namespace VoiceGame
             PointF playerVel,
             List<Laser> playerLasers,
             List<Enemy> otherEnemies,
+            List<Companion> companions,
             int windowWidth,
             int windowHeight)
         {
@@ -151,13 +152,35 @@ namespace VoiceGame
             state.Add(Math.Min(otherEnemies.Count, 10) / 10f);
             state.Add(Math.Min(playerLasers.Count, 10) / 10f);
 
-            // Padding to reach 20 dimensions
-            while (state.Count < 20)
+            // Nearest companion (3 values) - prioritize companions if player is dead/far
+            if (companions != null && companions.Count > 0)
+            {
+                var nearestCompanion = companions
+                    .OrderBy(c => Math.Sqrt(Math.Pow(c.Position.X - enemyPos.X, 2) + Math.Pow(c.Position.Y - enemyPos.Y, 2)))
+                    .First();
+
+                float compDx = (nearestCompanion.Position.X - enemyPos.X) / windowWidth;
+                float compDy = (nearestCompanion.Position.Y - enemyPos.Y) / windowHeight;
+                float compDist = (float)Math.Sqrt(compDx * compDx + compDy * compDy);
+
+                state.Add(compDx);
+                state.Add(compDy);
+                state.Add(compDist);
+            }
+            else
+            {
+                state.Add(0f);
+                state.Add(0f);
+                state.Add(2f);
+            }
+
+            // Padding to reach 23 dimensions (20 + 3 for companion)
+            while (state.Count < 23)
             {
                 state.Add(0f);
             }
 
-            return state.Take(20).ToArray();
+            return state.Take(23).ToArray();
         }
 
         /// <summary>
@@ -170,6 +193,7 @@ namespace VoiceGame
             PointF playerVel,
             List<Laser> playerLasers,
             List<Enemy> otherEnemies,
+            List<Companion> companions,
             int windowWidth,
             int windowHeight)
         {
@@ -178,7 +202,7 @@ namespace VoiceGame
                 return GetDefaultMovement(enemyPos, playerPos);
             }
 
-            float[] state = EncodeEnemyState(enemyPos, playerPos, playerVel, playerLasers, otherEnemies, windowWidth, windowHeight);
+            float[] state = EncodeEnemyState(enemyPos, playerPos, playerVel, playerLasers, otherEnemies, companions, windowWidth, windowHeight);
             enemyExperiences[enemyId].LastState = state;
 
             int actionIndex;
@@ -208,6 +232,7 @@ namespace VoiceGame
             PointF playerVel,
             List<Laser> playerLasers,
             List<Enemy> otherEnemies,
+            List<Companion> companions,
             int windowWidth,
             int windowHeight,
             out PointF shootDirection)
@@ -219,7 +244,33 @@ namespace VoiceGame
                 return false;
             }
 
-            float[] state = EncodeEnemyState(enemyPos, playerPos, playerVel, playerLasers, otherEnemies, windowWidth, windowHeight);
+            // Find best target (player or nearest companion)
+            PointF targetPos = playerPos;
+            PointF targetVel = playerVel;
+
+            // If player is dead or far, prioritize companions
+            float playerDist = (float)Math.Sqrt(Math.Pow(playerPos.X - enemyPos.X, 2) + Math.Pow(playerPos.Y - enemyPos.Y, 2));
+
+            if (companions != null && companions.Count > 0)
+            {
+                var nearestCompanion = companions
+                    .OrderBy(c => Math.Sqrt(Math.Pow(c.Position.X - enemyPos.X, 2) + Math.Pow(c.Position.Y - enemyPos.Y, 2)))
+                    .FirstOrDefault();
+
+                if (nearestCompanion != null)
+                {
+                    float companionDist = (float)Math.Sqrt(Math.Pow(nearestCompanion.Position.X - enemyPos.X, 2) + Math.Pow(nearestCompanion.Position.Y - enemyPos.Y, 2));
+
+                    // Target companion if it's closer or if player is dead (at -1000, -1000)
+                    if (companionDist < playerDist || playerPos.X < 0 || playerPos.Y < 0)
+                    {
+                        targetPos = nearestCompanion.Position;
+                        targetVel = nearestCompanion.Velocity;
+                    }
+                }
+            }
+
+            float[] state = EncodeEnemyState(enemyPos, playerPos, playerVel, playerLasers, otherEnemies, companions, windowWidth, windowHeight);
 
             int actionIndex;
             if (random.NextDouble() < epsilon)
@@ -238,9 +289,9 @@ namespace VoiceGame
                 case 0: // Don't shoot
                     return false;
 
-                case 1: // Shoot directly at player
-                    float dx = playerPos.X - enemyPos.X;
-                    float dy = playerPos.Y - enemyPos.Y;
+                case 1: // Shoot directly at target (player or companion)
+                    float dx = targetPos.X - enemyPos.X;
+                    float dy = targetPos.Y - enemyPos.Y;
                     float dist = (float)Math.Sqrt(dx * dx + dy * dy);
                     if (dist > 0)
                     {
@@ -249,9 +300,9 @@ namespace VoiceGame
                     }
                     return false;
 
-                case 2: // Predictive shooting
-                    float predX = playerPos.X + playerVel.X * 3;
-                    float predY = playerPos.Y + playerVel.Y * 3;
+                case 2: // Predictive shooting at target
+                    float predX = targetPos.X + targetVel.X * 3;
+                    float predY = targetPos.Y + targetVel.Y * 3;
                     float pdx = predX - enemyPos.X;
                     float pdy = predY - enemyPos.Y;
                     float pdist = (float)Math.Sqrt(pdx * pdx + pdy * pdy);
@@ -300,6 +351,14 @@ namespace VoiceGame
         public void EnemyHitPlayer(int enemyId)
         {
             RecordReward(enemyId, 50f);
+        }
+
+        /// <summary>
+        /// Enemy hit a companion - positive reward.
+        /// </summary>
+        public void EnemyHitCompanion(int enemyId)
+        {
+            RecordReward(enemyId, 30f);
         }
 
         /// <summary>
@@ -353,7 +412,7 @@ namespace VoiceGame
         public void SaveModels()
         {
             var modelManager = new ModelManager();
-            
+
             // Calculate performance metrics from actual enemy experiences
             double movementPerformance = CalculateMovementPerformance();
             double shootingPerformance = CalculateShootingPerformance();
@@ -361,10 +420,10 @@ namespace VoiceGame
             // Save only if these are the best models
             var movementData = movementTrainer.GetModelData();
             var shootingData = shootingTrainer.GetModelData();
-            
+
             modelManager.SaveBestModel("enemy_movement", movementData, movementPerformance);
             modelManager.SaveBestModel("enemy_shooting", shootingData, shootingPerformance);
-            
+
             Console.WriteLine("💾 Enemy learning models saved (best only)");
         }
 
@@ -374,7 +433,7 @@ namespace VoiceGame
         private double CalculateMovementPerformance()
         {
             if (enemyExperiences.Count == 0) return 0.0;
-            
+
             var recentExperiences = enemyExperiences.Values.TakeLast(20); // Last 20 enemies
             return recentExperiences.Any() ? recentExperiences.Average(e => e.AccumulatedReward) : 0.0;
         }
@@ -385,11 +444,11 @@ namespace VoiceGame
         private double CalculateShootingPerformance()
         {
             if (enemyExperiences.Count == 0) return 0.0;
-            
+
             // Simple heuristic: positive rewards indicate successful actions
             var recentExperiences = enemyExperiences.Values.TakeLast(20);
             var positiveRewards = recentExperiences.Where(e => e.AccumulatedReward > 0);
-            
+
             return positiveRewards.Any() ? positiveRewards.Average(e => e.AccumulatedReward) : 0.0;
         }
 

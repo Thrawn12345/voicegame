@@ -295,7 +295,7 @@ namespace VoiceGame
 
             config = new AITrainer.ModelConfig
             {
-                StateSpaceSize = 24,  // 2 pos + 3 player + 3*5 bullets + 4 walls
+                StateSpaceSize = 32,  // 2 pos + 3 player + 3*5 bullets + 4 walls + 2*4 obstacles
                 ActionSpaceSize = 9,
                 LearningRate = 0.001f,
                 ExplorationRate = epsilon
@@ -305,7 +305,7 @@ namespace VoiceGame
             Console.WriteLine("🤖 Companion Movement Agent initialized");
         }
 
-        public float[] EncodeState(PointF companionPos, PointF playerPos, List<EnemyBullet> bullets, Size windowSize)
+        public float[] EncodeState(PointF companionPos, PointF playerPos, List<EnemyBullet> bullets, Size windowSize, List<Obstacle>? obstacles = null)
         {
             List<float> state = new List<float>();
 
@@ -355,6 +355,40 @@ namespace VoiceGame
             state.Add(companionPos.Y / 100f);
             state.Add((windowSize.Width - companionPos.X) / 100f);
             state.Add((windowSize.Height - companionPos.Y) / 100f);
+
+            // Closest 2 obstacles (8 features)
+            if (obstacles != null && obstacles.Count > 0)
+            {
+                var nearestObstacles = obstacles
+                    .OrderBy(o => Distance(companionPos, o.Position))
+                    .Take(2)
+                    .ToList();
+
+                for (int i = 0; i < 2; i++)
+                {
+                    if (i < nearestObstacles.Count)
+                    {
+                        var obstacle = nearestObstacles[i];
+                        float odx = (obstacle.Position.X - companionPos.X) / windowSize.Width;
+                        float ody = (obstacle.Position.Y - companionPos.Y) / windowSize.Height;
+                        float odist = (float)Math.Sqrt(odx * odx + ody * ody);
+                        float osize = (obstacle.Size.Width + obstacle.Size.Height) / (windowSize.Width + windowSize.Height);
+
+                        state.Add(odx);
+                        state.Add(ody);
+                        state.Add(odist);
+                        state.Add(osize);
+                    }
+                    else
+                    {
+                        state.AddRange(new float[] { 1f, 1f, 2f, 0f });
+                    }
+                }
+            }
+            else
+            {
+                state.AddRange(new float[] { 1f, 1f, 2f, 0f, 1f, 1f, 2f, 0f });
+            }
 
             return state.ToArray();
         }
@@ -862,7 +896,7 @@ namespace VoiceGame
 
             config = new AITrainer.ModelConfig
             {
-                StateSpaceSize = 24,  // 2 pos + 5 player + 2*3 companions + 3*3 lasers + 4 walls
+                StateSpaceSize = 32,  // 2 pos + 5 player + 2*3 companions + 3*3 lasers + 4 walls + 2*4 obstacles
                 ActionSpaceSize = 12,  // 8 directions + stop + 3 special patterns
                 LearningRate = 0.001f,
                 ExplorationRate = epsilon
@@ -872,7 +906,7 @@ namespace VoiceGame
             Console.WriteLine("👹 Boss Movement Agent initialized");
         }
 
-        public float[] EncodeState(PointF bossPos, PointF playerPos, List<Companion> companions, List<Laser> playerLasers, Size windowSize)
+        public float[] EncodeState(PointF bossPos, PointF playerPos, List<Companion> companions, List<Laser> playerLasers, Size windowSize, List<Obstacle>? obstacles = null)
         {
             List<float> state = new List<float>();
 
@@ -940,6 +974,43 @@ namespace VoiceGame
             state.Add(bossPos.Y / 100f);
             state.Add((windowSize.Width - bossPos.X) / 100f);
             state.Add((windowSize.Height - bossPos.Y) / 100f);
+
+            // Nearest 2 obstacles (for tactical maneuvering and cover)
+            if (obstacles != null && obstacles.Count > 0)
+            {
+                var nearestObstacles = obstacles
+                    .OrderBy(o => Distance(bossPos, new PointF(o.Position.X + o.Size.Width / 2, o.Position.Y + o.Size.Height / 2)))
+                    .Take(2)
+                    .ToList();
+
+                for (int i = 0; i < 2; i++)
+                {
+                    if (i < nearestObstacles.Count)
+                    {
+                        var obs = nearestObstacles[i];
+                        float centerX = obs.Position.X + obs.Size.Width / 2;
+                        float centerY = obs.Position.Y + obs.Size.Height / 2;
+                        float odx = (centerX - bossPos.X) / windowSize.Width;
+                        float ody = (centerY - bossPos.Y) / windowSize.Height;
+                        float odist = (float)Math.Sqrt(odx * odx + ody * ody);
+                        float osize = Math.Max(obs.Size.Width, obs.Size.Height) / 100f;
+
+                        state.Add(odx);
+                        state.Add(ody);
+                        state.Add(odist);
+                        state.Add(osize);
+                    }
+                    else
+                    {
+                        state.AddRange(new float[] { 2f, 2f, 3f, 0f });
+                    }
+                }
+            }
+            else
+            {
+                // No obstacles - add empty data
+                state.AddRange(new float[] { 2f, 2f, 3f, 0f, 2f, 2f, 3f, 0f });
+            }
 
             return state.ToArray();
         }

@@ -160,17 +160,17 @@ namespace VoiceGame
                         }
                     }
 
-                    // Reward for survival
+                    // Reward for survival and dodging bullets
                     if (!hit)
-                        reward += 1f;
+                        reward += 2f;
 
                     // Penalty for staying still
                     if (stationaryFrames > 10)
-                        reward -= 10f;
+                        reward -= 15f;
 
-                    // Bonus for movement
+                    // Bonus for movement (encourages active dodging)
                     if (Distance(newPos, lastPos) > 2f)
-                        reward += 2f;
+                        reward += 3f;
 
                     // Wall proximity penalty - scales smoothly with pixel distance
                     float distToLeft = newPos.X - rangeBounds.Left;
@@ -178,7 +178,7 @@ namespace VoiceGame
                     float distToTop = newPos.Y - rangeBounds.Top;
                     float distToBottom = rangeBounds.Bottom - newPos.Y;
                     float minWallDist = Math.Min(Math.Min(distToLeft, distToRight), Math.Min(distToTop, distToBottom));
-                    
+
                     // Continuous scaling: closer = worse penalty
                     // At 0px: -20, at 50px: -5, at 100px: -1.25, at 150px+: 0
                     if (minWallDist < 150f)
@@ -243,9 +243,9 @@ namespace VoiceGame
                         rangeBounds.Left + random.Next(rangeBounds.Width),
                         rangeBounds.Top + random.Next(rangeBounds.Height)
                     );
-                    enemies.Add(new Enemy(enemyPos, GameConstants.EnemySpeed, DateTime.Now, EnemyBehavior.Aggressive, DateTime.Now, -1) 
-                    { 
-                        Health = GameConstants.EnemyHealth 
+                    enemies.Add(new Enemy(enemyPos, GameConstants.EnemySpeed, DateTime.Now, EnemyBehavior.Aggressive, DateTime.Now, -1)
+                    {
+                        Health = GameConstants.EnemyHealth
                     });
                 }
 
@@ -370,6 +370,15 @@ namespace VoiceGame
 
                 PointF companionPos = new PointF(playerCenter.X + 100, playerCenter.Y);
                 List<EnemyBullet> bullets = new List<EnemyBullet>();
+
+                // Create static training obstacles
+                List<Obstacle> obstacles = new List<Obstacle>
+                {
+                    new Obstacle(new PointF(playerCenter.X - 150, playerCenter.Y - 100), new SizeF(80, 60)),
+                    new Obstacle(new PointF(playerCenter.X + 100, playerCenter.Y + 80), new SizeF(60, 80)),
+                    new Obstacle(new PointF(playerCenter.X - 50, playerCenter.Y + 120), new SizeF(70, 50))
+                };
+
                 float[] lastState = null!;
                 int lastAction = 0;
 
@@ -399,7 +408,7 @@ namespace VoiceGame
                     }
 
                     // Get state
-                    float[] state = agent.EncodeState(companionPos, playerPos, bullets, windowSize);
+                    float[] state = agent.EncodeState(companionPos, playerPos, bullets, windowSize, obstacles);
 
                     // Select action
                     int action = agent.SelectAction(state);
@@ -443,16 +452,31 @@ namespace VoiceGame
                         }
                     }
 
-                    // Reward for survival
+                    // Reward for survival and bullet dodging
                     if (!hit)
-                        reward += 1f;
+                    {
+                        reward += 2f; // Base survival
 
-                    // Distance from player
+                        // Bonus for dodging close bullets (near-miss reward)
+                        float closestBulletDist = float.MaxValue;
+                        foreach (var bullet in bullets)
+                        {
+                            float dist = Distance(newPos, bullet.Position);
+                            if (dist < closestBulletDist)
+                                closestBulletDist = dist;
+                        }
+                        if (closestBulletDist < 30f && closestBulletDist >= 15f)
+                            reward += 1.5f; // Near-miss bonus
+                    }
+
+                    // Distance from player - more rewarding for staying close
                     float distFromPlayer = Distance(newPos, playerPos);
                     if (distFromPlayer > 200f)
-                        reward -= 5f; // Penalty for being too far (but less than bullet hit)
+                        reward -= 8f; // Stronger penalty for being too far
+                    else if (distFromPlayer < 100f)
+                        reward += 5f; // Strong bonus for optimal proximity
                     else if (distFromPlayer < 150f)
-                        reward += 3f; // Bonus for staying close
+                        reward += 3.5f; // Good bonus for staying close
 
                     // Learn
                     if (lastState != null)
@@ -504,9 +528,9 @@ namespace VoiceGame
                         rangeBounds.Left + random.Next(rangeBounds.Width),
                         rangeBounds.Top + random.Next(rangeBounds.Height)
                     );
-                    enemies.Add(new Enemy(enemyPos, GameConstants.EnemySpeed, DateTime.Now, EnemyBehavior.Aggressive, DateTime.Now, -1) 
-                    { 
-                        Health = GameConstants.EnemyHealth 
+                    enemies.Add(new Enemy(enemyPos, GameConstants.EnemySpeed, DateTime.Now, EnemyBehavior.Aggressive, DateTime.Now, -1)
+                    {
+                        Health = GameConstants.EnemyHealth
                     });
                 }
 
@@ -780,7 +804,7 @@ namespace VoiceGame
                             Math.Clamp(pos.X + vel.X, rangeBounds.Left + 20, rangeBounds.Right - 20),
                             Math.Clamp(pos.Y + vel.Y, rangeBounds.Top + 20, rangeBounds.Bottom - 20)
                         );
-                        
+
                         // Bounce off walls
                         PointF newVel = vel;
                         if (newPos.X <= rangeBounds.Left + 20 || newPos.X >= rangeBounds.Right - 20)
@@ -894,6 +918,19 @@ namespace VoiceGame
                     companions.Add(new Companion(companionPos, PointF.Empty, i, CompanionRole.LeftFlank, companionPos, DateTime.Now));
                 }
 
+                // Create static training obstacles for tactical maneuvering
+                PointF center = new PointF(
+                    rangeBounds.Left + rangeBounds.Width / 2,
+                    rangeBounds.Top + rangeBounds.Height / 2
+                );
+                List<Obstacle> obstacles = new List<Obstacle>
+                {
+                    new Obstacle(new PointF(center.X - 200, center.Y - 150), new SizeF(90, 70)),
+                    new Obstacle(new PointF(center.X + 120, center.Y + 100), new SizeF(75, 85)),
+                    new Obstacle(new PointF(center.X - 80, center.Y + 180), new SizeF(85, 60)),
+                    new Obstacle(new PointF(center.X + 150, center.Y - 120), new SizeF(65, 75))
+                };
+
                 List<Laser> lasers = new List<Laser>();
                 float[] lastState = null!;
                 int lastAction = 0;
@@ -915,7 +952,7 @@ namespace VoiceGame
                     }
 
                     // Get state
-                    float[] state = agent.EncodeState(bossPos, playerPos, companions, lasers, windowSize);
+                    float[] state = agent.EncodeState(bossPos, playerPos, companions, lasers, windowSize, obstacles);
 
                     // Select action
                     int action = agent.SelectAction(state);
@@ -1140,7 +1177,7 @@ namespace VoiceGame
             public void RunEpisode(Rectangle rangeBounds, Size windowSize, int episodeLength = 500)
             {
                 totalEpisodesRun++;
-                
+
                 // Multi-phase training: progressively increase companion count
                 int companionCount = 1; // Default
                 if (totalEpisodesRun <= 20)
@@ -1149,7 +1186,7 @@ namespace VoiceGame
                     companionCount = 2; // Phase 2: Learn to avoid one other companion
                 else
                     companionCount = random.Next(3, 5); // Phase 3: Full complexity with 3-4 companions
-                
+
                 // Spawn multiple companions
                 List<PointF> companionPositions = new List<PointF>();
                 for (int c = 0; c < companionCount; c++)
@@ -1163,7 +1200,7 @@ namespace VoiceGame
 
                 List<EnemyBullet> bullets = new List<EnemyBullet>();
                 List<Enemy> enemies = new List<Enemy>();
-                
+
                 // Spawn 2-4 enemies
                 int enemyCount = random.Next(2, 5);
                 for (int i = 0; i < enemyCount; i++)
@@ -1180,7 +1217,7 @@ namespace VoiceGame
                 List<int> lastActions = new List<int>();
                 List<int> stationaryFrames = new List<int>();
                 List<PointF> lastPositions = new List<PointF>();
-                
+
                 for (int c = 0; c < companionCount; c++)
                 {
                     lastStates.Add(null!);
@@ -1217,7 +1254,7 @@ namespace VoiceGame
                     for (int c = 0; c < companionCount; c++)
                     {
                         PointF companionPos = companionPositions[c];
-                        
+
                         // Get state
                         float[] state = agent.EncodeState(companionPos, bullets, enemies, new List<Boss>(), windowSize);
 
@@ -1238,7 +1275,7 @@ namespace VoiceGame
                             stationaryFrames[c] = 0;
 
                         newCompanionPositions.Add(newPos);
-                        
+
                         // Calculate reward
                         float reward = 0f;
                         bool hit = false;
@@ -1265,21 +1302,33 @@ namespace VoiceGame
                             }
                         }
 
-                        // Survival reward
+                        // Survival and bullet dodging reward
                         if (!hit)
-                            reward += 1f;
+                        {
+                            reward += 2f; // Base survival (increased from 1f)
+
+                            // Near-miss bullet dodging bonus
+                            if (bullets.Count > 0)
+                            {
+                                float closestBulletDist = bullets.Min(b => Distance(newPos, b.Position));
+                                if (closestBulletDist < 35f && closestBulletDist >= 15f)
+                                    reward += 1.2f; // Near-miss dodge bonus
+                                else if (closestBulletDist < 50f && closestBulletDist >= 35f)
+                                    reward += 0.5f; // Close proximity awareness
+                            }
+                        }
 
                         // Penalty for staying still
                         if (stationaryFrames[c] > 10)
-                            reward -= 8f;
+                            reward -= 12f;
 
-                        // Bonus for movement
+                        // Bonus for movement (active survival)
                         if (Distance(newPos, lastPositions[c]) > 2f)
-                            reward += 2f;
+                            reward += 3f;
 
                         // Bonus for maintaining distance from enemies
-                        float avgEnemyDist = enemies.Count > 0 
-                            ? enemies.Average(e => Distance(newPos, e.Position)) 
+                        float avgEnemyDist = enemies.Count > 0
+                            ? enemies.Average(e => Distance(newPos, e.Position))
                             : 500f;
                         if (avgEnemyDist > 150f && avgEnemyDist < 300f)
                             reward += 3f; // Good distance for survival
@@ -1298,7 +1347,7 @@ namespace VoiceGame
                                         minCompanionDist = dist;
                                 }
                             }
-                            
+
                             // Severe penalty for clustering too close
                             if (minCompanionDist < 40f)
                                 reward -= 10f;
@@ -1318,14 +1367,14 @@ namespace VoiceGame
                         lastActions[c] = action;
                         lastPositions[c] = newPos;
                     }
-                    
+
                     companionPositions = newCompanionPositions;
 
                     // Update enemies (simple movement toward nearest companion)
                     for (int i = 0; i < enemies.Count; i++)
                     {
                         PointF enemyPos = enemies[i].Position;
-                        
+
                         // Target nearest companion
                         PointF targetPos = companionPositions[0];
                         float minDist = Distance(enemyPos, targetPos);
@@ -1338,11 +1387,11 @@ namespace VoiceGame
                                 targetPos = companionPositions[c];
                             }
                         }
-                        
+
                         float dx = targetPos.X - enemyPos.X;
                         float dy = targetPos.Y - enemyPos.Y;
                         float dist2 = (float)Math.Sqrt(dx * dx + dy * dy);
-                        
+
                         PointF enemyVel = PointF.Empty;
                         if (dist2 > 0)
                         {
@@ -1407,7 +1456,7 @@ namespace VoiceGame
                 // Spawn 3-6 patrolling enemies
                 List<Enemy> enemies = new List<Enemy>();
                 int enemyCount = random.Next(GameConstants.StealthMinEnemies, GameConstants.StealthMaxEnemies + 1);
-                
+
                 for (int i = 0; i < enemyCount; i++)
                 {
                     PointF enemyPos = new PointF(
@@ -1453,14 +1502,14 @@ namespace VoiceGame
                     for (int i = 0; i < enemies.Count; i++)
                     {
                         PointF enemyPos = enemies[i].Position;
-                        
+
                         // Simple patrol: move in current direction, bounce off walls
                         float angle = (float)(random.NextDouble() * Math.PI * 2);
                         if (frame % 60 == 0) // Change direction every 60 frames
                         {
                             angle = (float)(random.NextDouble() * Math.PI * 2);
                         }
-                        
+
                         PointF enemyVel = new PointF(
                             (float)Math.Cos(angle) * GameConstants.StealthEnemyPatrolSpeed,
                             (float)Math.Sin(angle) * GameConstants.StealthEnemyPatrolSpeed
@@ -1470,7 +1519,7 @@ namespace VoiceGame
                             Math.Clamp(enemyPos.X + enemyVel.X, rangeBounds.Left + 20, rangeBounds.Right - 20),
                             Math.Clamp(enemyPos.Y + enemyVel.Y, rangeBounds.Top + 20, rangeBounds.Bottom - 20)
                         );
-                        
+
                         enemies[i] = enemies[i] with { Position = newEnemyPos };
                     }
 
@@ -1485,7 +1534,7 @@ namespace VoiceGame
                         float dist = Distance(newPos, enemy.Position);
                         if (dist < minEnemyDist)
                             minEnemyDist = dist;
-                            
+
                         if (dist < GameConstants.EnemyDetectionRange)
                         {
                             detected = true;
@@ -1498,13 +1547,13 @@ namespace VoiceGame
                     if (!detected)
                         reward += 2f;
 
-                    // Reward for movement (exploration)
+                    // Reward for movement (exploration and evasion)
                     if (moveDist > 2f)
-                        reward += 1f;
+                        reward += 2f;
 
-                    // Penalty for staying still
+                    // Penalty for staying still (sitting duck)
                     if (stationaryFrames > 10)
-                        reward -= 5f;
+                        reward -= 8f;
 
                     // Reward for maintaining safe distance from enemies (sweet spot: 50-100px)
                     if (!detected && minEnemyDist >= 50f && minEnemyDist <= 100f)
@@ -1518,7 +1567,7 @@ namespace VoiceGame
                     float distToTop = newPos.Y - rangeBounds.Top;
                     float distToBottom = rangeBounds.Bottom - newPos.Y;
                     float minWallDist = Math.Min(Math.Min(distToLeft, distToRight), Math.Min(distToTop, distToBottom));
-                    
+
                     if (minWallDist < 150f)
                     {
                         float normalizedDist = minWallDist / 150f;
@@ -1586,7 +1635,7 @@ namespace VoiceGame
                     // Update coverage map
                     int gridX = Math.Clamp((int)((enemyPos.X - rangeBounds.Left) / gridCellWidth), 0, 2);
                     int gridY = Math.Clamp((int)((enemyPos.Y - rangeBounds.Top) / gridCellHeight), 0, 2);
-                    
+
                     // Decay old coverage
                     for (int i = 0; i < 3; i++)
                     {
@@ -1595,7 +1644,7 @@ namespace VoiceGame
                             areaCoverage[i, j] *= 0.99f;
                         }
                     }
-                    
+
                     // Mark current cell as visited
                     float oldCoverage = areaCoverage[gridX, gridY];
                     areaCoverage[gridX, gridY] = Math.Min(1f, areaCoverage[gridX, gridY] + 0.1f);
@@ -1661,7 +1710,7 @@ namespace VoiceGame
                     float distToTop = newPos.Y - rangeBounds.Top;
                     float distToBottom = rangeBounds.Bottom - newPos.Y;
                     float minWallDist = Math.Min(Math.Min(distToLeft, distToRight), Math.Min(distToTop, distToBottom));
-                    
+
                     if (minWallDist < 50f)
                         reward -= 2f;
 
